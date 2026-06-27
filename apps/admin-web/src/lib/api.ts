@@ -117,3 +117,34 @@ export interface AuditEntry {
   details?: string;
   createdAt: string;
 }
+
+export interface AdminAccount {
+  _id: string;
+  email: string;
+  role: 'owner' | 'staff';
+  createdAt: string;
+}
+
+export interface EodReport {
+  start: string;
+  end: string;
+  summary: {
+    revenue: number;
+    minutesSold: number;
+    minutesRemoved: number;
+    topupCount: number;
+    adjustmentCount: number;
+    transactionCount: number;
+    newUsers: number;
+    sessionsStarted: number;
+  };
+  byMethod: Array<{ method: string; count: number; amount: number; minutes: number }>;
+  transactions: Array<{
+    createdAt: string;
+    username: string;
+    minutesAdded: number;
+    amountPaid: number;
+    paymentMethod: string;
+    paymentReference: string;
+  }>;
+}

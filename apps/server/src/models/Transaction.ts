@@ -7,6 +7,7 @@ export interface ITransaction extends Document {
   paymentMethod: string;
   paymentReference?: string;
   createdBy: Types.ObjectId;
+  createdAt: Date;
 }
 
 const transactionSchema = new Schema<ITransaction>(

@@ -5,7 +5,9 @@ import DashboardView from './views/DashboardView.vue';
 import UsersView from './views/UsersView.vue';
 import ComputersView from './views/ComputersView.vue';
 import TransactionsView from './views/TransactionsView.vue';
+import ReportsView from './views/ReportsView.vue';
 import AuditView from './views/AuditView.vue';
+import AdminsView from './views/AdminsView.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -15,7 +17,9 @@ const router = createRouter({
     { path: '/users', name: 'users', component: UsersView },
     { path: '/computers', name: 'computers', component: ComputersView },
     { path: '/transactions', name: 'transactions', component: TransactionsView },
+    { path: '/reports', name: 'reports', component: ReportsView },
     { path: '/audit', name: 'audit', component: AuditView },
+    { path: '/admins', name: 'admins', component: AdminsView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });

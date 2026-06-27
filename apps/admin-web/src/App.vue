@@ -24,7 +24,9 @@ const links = [
   { name: 'users', label: 'Users', icon: '◉' },
   { name: 'computers', label: 'Computers', icon: '▢' },
   { name: 'transactions', label: 'Transactions', icon: '₱' },
+  { name: 'reports', label: 'Reports', icon: '▤' },
   { name: 'audit', label: 'Audit log', icon: '☰' },
+  { name: 'admins', label: 'Admins', icon: '◈' },
 ];
 
 function logout() {

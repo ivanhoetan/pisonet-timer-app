@@ -71,6 +71,12 @@ export const adminLoginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const adminCreateSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).max(128),
+  role: z.enum(['owner', 'staff']).optional(),
+});
+
 export const maintenanceSchema = z.object({
   enabled: z.boolean(),
 });

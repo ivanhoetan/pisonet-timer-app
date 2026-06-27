@@ -12,9 +12,12 @@ const ACTION_LABELS: Record<string, string> = {
   time_adjust: 'Time removed',
   user_create: 'User created',
   user_update: 'User updated',
+  admin_create: 'Admin created',
   computer_register: 'PC registered',
   computer_lock: 'PC locked',
   computer_shutdown: 'PC shut down',
+  computer_maintenance_on: 'Maintenance on',
+  computer_maintenance_off: 'Maintenance off',
 };
 
 function label(action: string): string {

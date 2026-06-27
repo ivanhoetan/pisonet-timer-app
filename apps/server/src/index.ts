@@ -16,6 +16,7 @@ import { sessionsRouter } from './routes/sessions';
 import { transactionsRouter } from './routes/transactions';
 import { statsRouter } from './routes/stats';
 import { auditRouter } from './routes/audit';
+import { adminsRouter } from './routes/admins';
 
 async function main(): Promise<void> {
   await connectDb();
@@ -46,6 +47,7 @@ async function main(): Promise<void> {
   app.use('/transactions', transactionsRouter);
   app.use('/stats', statsRouter);
   app.use('/audit', auditRouter);
+  app.use('/admins', adminsRouter);
 
   // Serve the admin web app (built SPA) at /admin, if present.
   const adminDist = path.resolve(__dirname, '../../admin-web/dist');

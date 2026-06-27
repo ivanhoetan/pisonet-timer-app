@@ -502,6 +502,33 @@ th {
   z-index: 100;
 }
 
+@media print {
+  .sidebar,
+  .topbar,
+  .toast {
+    display: none !important;
+  }
+  .content {
+    padding: 0;
+    max-width: none;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #ccc;
+    color: #000;
+    break-inside: avoid;
+  }
+  .stat-card .stat-label,
+  .muted,
+  th {
+    color: #333;
+  }
+}
+
 @media (max-width: 760px) {
   .sidebar {
     position: fixed;
