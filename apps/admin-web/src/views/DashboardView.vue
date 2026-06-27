@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { api, ApiError, type Overview, type LiveSession } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatClock, formatPesos, pesosToMinutes } from '../lib/format';
 
 const overview = ref<Overview | null>(null);
@@ -203,9 +204,9 @@ onUnmounted(() => {
             </td>
             <td>
               <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
-                <button class="btn-ghost btn-sm" @click="openTopup(s)">+ Time</button>
-                <button class="btn-warning btn-sm" @click="openAdjust(s)">− Time</button>
-                <button class="btn-danger btn-sm" @click="lockComputer(s)">Lock</button>
+                <button class="btn-ghost btn-sm" @click="openTopup(s)"><Icon name="plus" :size="14" />Time</button>
+                <button class="btn-warning btn-sm" @click="openAdjust(s)"><Icon name="minus" :size="14" />Time</button>
+                <button class="btn-danger btn-sm" @click="lockComputer(s)"><Icon name="lock" :size="14" />Lock</button>
               </div>
             </td>
           </tr>
@@ -237,9 +238,9 @@ onUnmounted(() => {
       </p>
       <p v-if="topupError" class="error" style="margin-bottom: 12px">{{ topupError }}</p>
       <div class="modal-actions">
-        <button class="btn-ghost" @click="topupFor = null">Cancel</button>
+        <button class="btn-ghost" @click="topupFor = null"><Icon name="x" />Cancel</button>
         <button class="btn-primary" :disabled="topupSaving" @click="submitTopup">
-          {{ topupSaving ? 'Adding…' : 'Add time' }}
+          <Icon name="plus" />{{ topupSaving ? 'Adding…' : 'Add time' }}
         </button>
       </div>
     </div>
@@ -261,9 +262,9 @@ onUnmounted(() => {
       </label>
       <p v-if="adjustError" class="error" style="margin-bottom: 12px">{{ adjustError }}</p>
       <div class="modal-actions">
-        <button class="btn-ghost" @click="adjustFor = null">Cancel</button>
+        <button class="btn-ghost" @click="adjustFor = null"><Icon name="x" />Cancel</button>
         <button class="btn-warning" :disabled="adjustSaving" @click="submitAdjust">
-          {{ adjustSaving ? 'Removing…' : 'Remove time' }}
+          <Icon name="minus" />{{ adjustSaving ? 'Removing…' : 'Remove time' }}
         </button>
       </div>
     </div>

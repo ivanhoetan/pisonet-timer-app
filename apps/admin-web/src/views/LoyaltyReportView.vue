@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type LoyaltyReport } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatDateTime } from '../lib/format';
 
 function pad(n: number): string {
@@ -122,10 +123,10 @@ onMounted(load);
         <span>To</span>
         <input type="date" v-model="to" @change="load" />
       </label>
-      <button class="btn-ghost" @click="load">Refresh</button>
+      <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
       <div class="spacer"></div>
-      <button class="btn-ghost" :disabled="!report" @click="exportCsv">Export CSV</button>
-      <button class="btn-primary" :disabled="!report" @click="printReport">Print / Save PDF</button>
+      <button class="btn-ghost" :disabled="!report" @click="exportCsv"><Icon name="download" />Export CSV</button>
+      <button class="btn-primary" :disabled="!report" @click="printReport"><Icon name="printer" />Print / Save PDF</button>
     </div>
 
     <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { auth, clearSession } from './lib/auth';
-import NavIcon from './components/NavIcon.vue';
+import Icon from './components/Icon.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -57,7 +57,7 @@ function go(name: string) {
         :class="{ active: route.name === link.name }"
         @click="go(link.name)"
       >
-        <NavIcon :name="link.icon" />
+        <Icon :name="link.icon" :size="18" />
         <span>{{ link.label }}</span>
       </a>
 

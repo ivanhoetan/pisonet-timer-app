@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { api, ApiError, type Transaction } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatDateTime, formatPesos } from '../lib/format';
 
 const transactions = ref<Transaction[]>([]);
@@ -48,7 +49,7 @@ onMounted(load);
   <p class="page-sub">Most recent 100 time changes (top-ups and corrections).</p>
 
   <div class="toolbar">
-    <button class="btn-ghost" @click="load">Refresh</button>
+    <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
     <div class="spacer"></div>
     <span class="muted">
       {{ transactions.length }} records · +{{ totalAdded }} / −{{ totalRemoved }} min ·

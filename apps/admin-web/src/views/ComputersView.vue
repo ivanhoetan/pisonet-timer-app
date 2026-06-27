@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import { api, ApiError, type Computer } from '../lib/api';
+import Icon from '../components/Icon.vue';
 
 const computers = ref<Computer[]>([]);
 const loading = ref(false);
@@ -118,9 +119,9 @@ onUnmounted(() => {
   <p class="page-sub">Monitor and remotely control each PC.</p>
 
   <div class="toolbar">
-    <button class="btn-ghost" @click="load">Refresh</button>
+    <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
     <div class="spacer"></div>
-    <button class="btn-primary" @click="showRegister = true">+ Register PC</button>
+    <button class="btn-primary" @click="showRegister = true"><Icon name="plus" />Register PC</button>
   </div>
 
   <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>
@@ -141,21 +142,21 @@ onUnmounted(() => {
           :disabled="c.status === 'OFFLINE'"
           @click="lock(c)"
         >
-          Lock
+          <Icon name="lock" :size="14" />Lock
         </button>
         <button
           class="btn-warning btn-sm"
           :disabled="c.status === 'OFFLINE'"
           @click="shutdown(c)"
         >
-          Shut down
+          <Icon name="power" :size="14" />Shut down
         </button>
         <button
           class="btn-ghost btn-sm"
           :disabled="c.status === 'OFFLINE'"
           @click="toggleMaintenance(c)"
         >
-          {{ c.status === 'MAINTENANCE' ? 'End maintenance' : 'Maintenance' }}
+          <Icon name="wrench" :size="14" />{{ c.status === 'MAINTENANCE' ? 'End maintenance' : 'Maintenance' }}
         </button>
       </div>
     </div>
@@ -175,9 +176,9 @@ onUnmounted(() => {
       </label>
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
       <div class="modal-actions">
-        <button class="btn-ghost" @click="showRegister = false">Cancel</button>
+        <button class="btn-ghost" @click="showRegister = false"><Icon name="x" />Cancel</button>
         <button class="btn-primary" :disabled="saving" @click="register">
-          {{ saving ? 'Saving…' : 'Register' }}
+          <Icon name="check" />{{ saving ? 'Saving…' : 'Register' }}
         </button>
       </div>
     </div>
@@ -195,7 +196,7 @@ onUnmounted(() => {
         <input :value="newCredentials.id" readonly @focus="($event.target as HTMLInputElement).select()" />
       </label>
       <button class="btn-ghost btn-sm" style="margin-bottom: 14px" @click="copy(newCredentials.id)">
-        Copy ID
+        <Icon name="copy" :size="14" />Copy ID
       </button>
       <label class="field">
         <span>Auth secret</span>
@@ -206,10 +207,10 @@ onUnmounted(() => {
         style="margin-bottom: 14px"
         @click="copy(newCredentials.authSecret)"
       >
-        Copy secret
+        <Icon name="copy" :size="14" />Copy secret
       </button>
       <div class="modal-actions">
-        <button class="btn-primary" @click="newCredentials = null">Done</button>
+        <button class="btn-primary" @click="newCredentials = null"><Icon name="check" />Done</button>
       </div>
     </div>
   </div>

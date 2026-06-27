@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type AdminUser } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import {
   formatDuration,
   pesosToMinutes,
@@ -208,9 +209,9 @@ onMounted(load);
 
   <div class="toolbar">
     <input v-model="search" placeholder="Search username…" @keyup.enter="load" />
-    <button class="btn-ghost" @click="load">Search</button>
+    <button class="btn-ghost" @click="load"><Icon name="search" />Search</button>
     <div class="spacer"></div>
-    <button class="btn-primary" @click="openCreate">+ New user</button>
+    <button class="btn-primary" @click="openCreate"><Icon name="userPlus" />New user</button>
   </div>
 
   <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>
@@ -254,18 +255,18 @@ onMounted(load);
               </td>
               <td>
                 <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
-                  <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
-                  <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+                  <button class="btn-primary btn-sm" @click="openTopup(u)"><Icon name="plus" :size="14" />Time</button>
+                  <button class="btn-warning btn-sm" @click="openAdjust(u)"><Icon name="minus" :size="14" />Time</button>
                   <button
                     v-if="rewardsAvailable(u.loyaltyStamps) > 0"
                     class="btn-success btn-sm"
                     @click="redeemReward(u)"
                   >
-                    Redeem
+                    <Icon name="gift" :size="14" />Redeem
                   </button>
-                  <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
+                  <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
                   <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
-                    {{ u.status === 'active' ? 'Disable' : 'Enable' }}
+                    <Icon :name="u.status === 'active' ? 'lock' : 'check'" :size="14" />{{ u.status === 'active' ? 'Disable' : 'Enable' }}
                   </button>
                 </div>
               </td>
@@ -307,18 +308,18 @@ onMounted(load);
           <span class="uc-val">{{ u.points }}</span>
         </div>
         <div class="uc-actions">
-          <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
-          <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+          <button class="btn-primary btn-sm" @click="openTopup(u)"><Icon name="plus" :size="14" />Time</button>
+          <button class="btn-warning btn-sm" @click="openAdjust(u)"><Icon name="minus" :size="14" />Time</button>
           <button
             v-if="rewardsAvailable(u.loyaltyStamps) > 0"
             class="btn-success btn-sm"
             @click="redeemReward(u)"
           >
-            Redeem
+            <Icon name="gift" :size="14" />Redeem
           </button>
-          <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
+          <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
           <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
-            {{ u.status === 'active' ? 'Disable' : 'Enable' }}
+            <Icon :name="u.status === 'active' ? 'lock' : 'check'" :size="14" />{{ u.status === 'active' ? 'Disable' : 'Enable' }}
           </button>
         </div>
       </div>
@@ -419,8 +420,9 @@ onMounted(load);
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
 
       <div class="modal-actions">
-        <button class="btn-ghost" @click="mode = null">Cancel</button>
+        <button class="btn-ghost" @click="mode = null"><Icon name="x" />Cancel</button>
         <button class="btn-primary" :disabled="saving" @click="submit">
+          <Icon :name="mode === 'adjust' ? 'minus' : 'check'" />
           {{
             saving
               ? 'Saving…'

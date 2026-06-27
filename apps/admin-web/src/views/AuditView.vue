@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type AuditEntry } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatDateTime } from '../lib/format';
 
 const logs = ref<AuditEntry[]>([]);
@@ -46,7 +47,7 @@ onMounted(load);
   <p class="page-sub">A record of every admin action (most recent 200).</p>
 
   <div class="toolbar">
-    <button class="btn-ghost" @click="load">Refresh</button>
+    <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
   </div>
 
   <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>

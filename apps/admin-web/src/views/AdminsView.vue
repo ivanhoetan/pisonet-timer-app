@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type AdminAccount } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatDateTime } from '../lib/format';
 import { auth } from '../lib/auth';
 
@@ -69,9 +70,9 @@ onMounted(load);
   <p class="page-sub">Manage portal accounts for you and your staff.</p>
 
   <div class="toolbar">
-    <button class="btn-ghost" @click="load">Refresh</button>
+    <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
     <div class="spacer"></div>
-    <button class="btn-primary" @click="openCreate">+ New admin</button>
+    <button class="btn-primary" @click="openCreate"><Icon name="shieldPlus" />New admin</button>
   </div>
 
   <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>
@@ -144,9 +145,9 @@ onMounted(load);
       </p>
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
       <div class="modal-actions">
-        <button class="btn-ghost" @click="showCreate = false">Cancel</button>
+        <button class="btn-ghost" @click="showCreate = false"><Icon name="x" />Cancel</button>
         <button class="btn-primary" :disabled="saving" @click="submit">
-          {{ saving ? 'Saving…' : 'Create admin' }}
+          <Icon name="shieldPlus" />{{ saving ? 'Saving…' : 'Create admin' }}
         </button>
       </div>
     </div>

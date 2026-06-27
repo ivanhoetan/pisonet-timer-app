@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type EodReport } from '../lib/api';
+import Icon from '../components/Icon.vue';
 import { formatDateTime, formatPesos } from '../lib/format';
 
 function todayStr(): string {
@@ -113,10 +114,10 @@ onMounted(load);
 
     <div class="toolbar no-print">
       <input type="date" v-model="date" @change="load" />
-      <button class="btn-ghost" @click="load">Refresh</button>
+      <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
       <div class="spacer"></div>
-      <button class="btn-ghost" :disabled="!report" @click="exportCsv">Export CSV</button>
-      <button class="btn-primary" :disabled="!report" @click="printReport">Print / Save PDF</button>
+      <button class="btn-ghost" :disabled="!report" @click="exportCsv"><Icon name="download" />Export CSV</button>
+      <button class="btn-primary" :disabled="!report" @click="printReport"><Icon name="printer" />Print / Save PDF</button>
     </div>
 
     <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>
