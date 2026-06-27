@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+; Replaces the Windows shell for the CURRENT user with the Pisonet timer.
+; EDIT the path below to match where the client is installed, then run as the
+; customer account. Keep the doubled backslashes (\\).
+[HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Winlogon]
+"Shell"="C:\\Program Files\\Pisonet Timer\\Pisonet Timer.exe"

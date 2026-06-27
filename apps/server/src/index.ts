@@ -1,4 +1,6 @@
 import http from 'http';
+import path from 'path';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -12,6 +14,8 @@ import { usersRouter } from './routes/users';
 import { computersRouter } from './routes/computers';
 import { sessionsRouter } from './routes/sessions';
 import { transactionsRouter } from './routes/transactions';
+import { statsRouter } from './routes/stats';
+import { auditRouter } from './routes/audit';
 
 async function main(): Promise<void> {
   await connectDb();
@@ -40,6 +44,18 @@ async function main(): Promise<void> {
   app.use('/computers', computersRouter);
   app.use('/sessions', sessionsRouter);
   app.use('/transactions', transactionsRouter);
+  app.use('/stats', statsRouter);
+  app.use('/audit', auditRouter);
+
+  // Serve the admin web app (built SPA) at /admin, if present.
+  const adminDist = path.resolve(__dirname, '../../admin-web/dist');
+  if (fs.existsSync(adminDist)) {
+    app.use('/admin', express.static(adminDist));
+    app.get('/admin/*', (_req, res) => {
+      res.sendFile(path.join(adminDist, 'index.html'));
+    });
+    console.log('Serving admin web app at /admin');
+  }
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });

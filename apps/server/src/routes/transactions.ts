@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { createTransactionSchema } from '@pisonet/shared';
+import { createTransactionSchema, pesosToMinutes } from '@pisonet/shared';
 import { Transaction } from '../models/Transaction';
 import { User } from '../models/User';
 import { validateBody } from '../middleware/validate';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth';
 import { sessionEngine } from '../services/sessionEngine';
+import { recordAudit } from '../services/audit';
 
 export const transactionsRouter = Router();
 
@@ -15,7 +16,12 @@ transactionsRouter.post(
   validateBody(createTransactionSchema),
   async (req: AuthRequest, res) => {
     try {
-      const { userId, minutesAdded, paymentMethod, paymentReference } = req.body;
+      const { userId, pesos, minutesAdded: rawMinutes, paymentMethod, paymentReference } = req.body;
+
+      // Peso-charged top-up derives minutes from the rate; a direct minutes
+      // grant (no pesos) is treated as free time (revenue = 0).
+      const minutesAdded = pesos !== undefined ? pesosToMinutes(pesos) : rawMinutes;
+      const amountPaid = pesos !== undefined ? pesos : 0;
       const secondsAdded = minutesAdded * 60;
 
       const user = await User.findById(userId);
@@ -30,6 +36,7 @@ transactionsRouter.post(
       const transaction = await Transaction.create({
         userId,
         minutesAdded,
+        amountPaid,
         paymentMethod,
         paymentReference,
         createdBy: req.auth!.sub,
@@ -39,6 +46,17 @@ transactionsRouter.post(
       if (activeSession) {
         await sessionEngine.addTime(activeSession.sessionId, secondsAdded);
       }
+
+      recordAudit(req, {
+        action: 'topup',
+        targetType: 'user',
+        targetId: userId,
+        targetLabel: user.username,
+        details:
+          amountPaid > 0
+            ? `+${minutesAdded} min for \u20b1${amountPaid} (${paymentMethod})`
+            : `+${minutesAdded} min (free grant)`,
+      });
 
       res.status(201).json({
         transaction,

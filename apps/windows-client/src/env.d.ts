@@ -10,6 +10,9 @@ export interface PisonetBridge {
   setConfig: (config: PairingConfig) => Promise<boolean>;
   clearConfig: () => Promise<boolean>;
   showWindow: () => Promise<boolean>;
+  engageLock: () => Promise<boolean>;
+  releaseLock: () => Promise<boolean>;
+  shutdown: () => Promise<boolean>;
   onTrayLogout: (callback: () => void) => () => void;
 }
 

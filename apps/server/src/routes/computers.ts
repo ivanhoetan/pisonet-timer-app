@@ -3,8 +3,9 @@ import { registerComputerSchema, heartbeatSchema, endComputerSessionSchema } fro
 import { Computer } from '../models/Computer';
 import { generateAuthSecret } from '../utils/crypto';
 import { validateBody } from '../middleware/validate';
-import { authMiddleware, adminMiddleware } from '../middleware/auth';
+import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth';
 import { sessionEngine } from '../services/sessionEngine';
+import { recordAudit } from '../services/audit';
 
 export const computersRouter = Router();
 
@@ -29,6 +30,13 @@ computersRouter.post(
         name,
         authSecret,
         status: 'OFFLINE',
+      });
+
+      recordAudit(req as AuthRequest, {
+        action: 'computer_register',
+        targetType: 'computer',
+        targetId: computer._id.toString(),
+        targetLabel: computer.computerCode,
       });
 
       res.status(201).json({
@@ -109,17 +117,48 @@ computersRouter.post(
         return;
       }
 
-      const active = sessionEngine.getByComputerId(computer._id.toString());
-      if (active) {
-        await sessionEngine.pauseSession(active.sessionId);
-      }
+      await sessionEngine.forceLock(computer._id.toString(), 'admin_lock');
 
-      await Computer.findByIdAndUpdate(computer._id, { status: 'LOCKED' });
+      recordAudit(req as AuthRequest, {
+        action: 'computer_lock',
+        targetType: 'computer',
+        targetId: computer._id.toString(),
+        targetLabel: computer.computerCode,
+      });
 
       res.json({ ok: true });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Failed to lock computer' });
+    }
+  }
+);
+
+computersRouter.post(
+  '/:id/shutdown',
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const computer = await Computer.findById(req.params.id);
+      if (!computer) {
+        res.status(404).json({ error: 'Computer not found' });
+        return;
+      }
+
+      await sessionEngine.shutdownComputer(computer._id.toString(), 'admin_shutdown');
+
+      recordAudit(req as AuthRequest, {
+        action: 'computer_shutdown',
+        targetType: 'computer',
+        targetId: computer._id.toString(),
+        targetLabel: computer.computerCode,
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to shut down computer' });
     }
   }
 );

@@ -80,6 +80,23 @@ export class SessionEngine {
     return undefined;
   }
 
+  listActive(): Array<ActiveSessionCache & { remainingSeconds: number }> {
+    const result: Array<ActiveSessionCache & { remainingSeconds: number }> = [];
+    for (const session of this.cache.values()) {
+      if (session.status !== SessionStatus.ACTIVE) continue;
+      result.push({ ...session, remainingSeconds: this.getRemainingSeconds(session) });
+    }
+    return result;
+  }
+
+  countActive(): number {
+    let count = 0;
+    for (const session of this.cache.values()) {
+      if (session.status === SessionStatus.ACTIVE) count += 1;
+    }
+    return count;
+  }
+
   getByUserId(userId: string): ActiveSessionCache | undefined {
     for (const session of this.cache.values()) {
       if (session.userId === userId && session.status === SessionStatus.ACTIVE) {
@@ -332,6 +349,28 @@ export class SessionEngine {
     });
 
     return remainingSeconds;
+  }
+
+  async forceLock(computerId: string, reason = 'admin_lock'): Promise<void> {
+    const active = this.getByComputerId(computerId);
+    if (active) {
+      // pauseSession saves remaining time and emits SESSION_ENDED + FORCE_LOCK.
+      await this.pauseSession(active.sessionId);
+    } else {
+      this.io?.to(`computer:${computerId}`).emit(WsEvents.FORCE_LOCK, { reason });
+    }
+
+    await Computer.findByIdAndUpdate(computerId, { status: 'LOCKED' });
+  }
+
+  async shutdownComputer(computerId: string, reason = 'admin_shutdown'): Promise<void> {
+    const active = this.getByComputerId(computerId);
+    if (active) {
+      await this.pauseSession(active.sessionId);
+    }
+
+    await Computer.findByIdAndUpdate(computerId, { status: 'LOCKED' });
+    this.io?.to(`computer:${computerId}`).emit(WsEvents.SHUTDOWN, { reason });
   }
 
   resyncComputer(computerId: string): void {

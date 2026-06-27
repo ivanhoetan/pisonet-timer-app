@@ -47,17 +47,43 @@ export const endSessionSchema = z.object({
   sessionId: z.string().min(1),
 });
 
-export const createTransactionSchema = z.object({
-  userId: z.string().min(1),
-  minutesAdded: z.number().int().positive(),
-  paymentMethod: z.string().default('manual'),
-  paymentReference: z.string().optional(),
-});
+export const createTransactionSchema = z
+  .object({
+    userId: z.string().min(1),
+    // Either charge in pesos (minutes are derived) or grant free minutes directly.
+    pesos: z.number().positive().optional(),
+    minutesAdded: z.number().int().positive().optional(),
+    paymentMethod: z.string().default('manual'),
+    paymentReference: z.string().optional(),
+  })
+  .refine((data) => data.pesos !== undefined || data.minutesAdded !== undefined, {
+    message: 'Provide pesos or minutesAdded',
+  });
 
 export const adminLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+export const adminCreateUserSchema = z.object({
+  username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
+  password: z.string().min(6).max(128),
+  pin: z.string().regex(/^\d{4,6}$/),
+  mobileNumber: z.string().max(20).optional(),
+  initialMinutes: z.number().int().min(0).optional(),
+});
+
+export const adminUpdateUserSchema = z
+  .object({
+    username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional(),
+    password: z.string().min(6).max(128).optional(),
+    pin: z.string().regex(/^\d{4,6}$/).optional(),
+    mobileNumber: z.string().max(20).optional(),
+    status: z.enum(['active', 'disabled']).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'No fields to update',
+  });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

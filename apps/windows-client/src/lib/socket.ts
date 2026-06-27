@@ -8,6 +8,7 @@ const WsEvents = {
   SESSION_ENDED: 'SESSION_ENDED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   FORCE_LOCK: 'FORCE_LOCK',
+  SHUTDOWN: 'SHUTDOWN',
   HEARTBEAT: 'HEARTBEAT',
 } as const;
 
@@ -31,6 +32,7 @@ export class SocketClient {
       onSessionEnded?: VoidHandler;
       onSessionExpired?: VoidHandler;
       onForceLock?: VoidHandler;
+      onShutdown?: VoidHandler;
     }
   ): void {
     this.disconnect();
@@ -77,6 +79,10 @@ export class SocketClient {
 
     this.socket.on(WsEvents.FORCE_LOCK, (payload) => {
       handlers.onForceLock?.(payload);
+    });
+
+    this.socket.on(WsEvents.SHUTDOWN, (payload) => {
+      handlers.onShutdown?.(payload);
     });
   }
 

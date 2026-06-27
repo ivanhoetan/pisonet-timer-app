@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { PairingConfig } from './env';
 import { loadConfig, saveConfig } from './lib/config';
 import { pinLogin, pinLogout, endSession, endComputerSession } from './lib/api';
@@ -30,11 +30,68 @@ const username = ref('');
 const remainingSeconds = ref(0);
 const startedAt = ref<Date | null>(null);
 
+// When no one is logged in, the PC auto-shuts-down after this many idle seconds.
+const IDLE_SHUTDOWN_SECONDS = 60;
+const idleSecondsLeft = ref(IDLE_SHUTDOWN_SECONDS);
+
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let idleTimer: ReturnType<typeof setInterval> | null = null;
 let removeTrayLogout: (() => void) | undefined;
 
 const displayTime = computed(() => formatTime(remainingSeconds.value));
+const idleDisplay = computed(() => formatTime(idleSecondsLeft.value));
+
+function triggerShutdown() {
+  cancelIdleCountdown();
+  window.pisonet?.shutdown?.();
+}
+
+function cancelIdleCountdown() {
+  if (idleTimer) clearInterval(idleTimer);
+  idleTimer = null;
+}
+
+function startIdleCountdown() {
+  cancelIdleCountdown();
+  idleSecondsLeft.value = IDLE_SHUTDOWN_SECONDS;
+  idleTimer = setInterval(() => {
+    idleSecondsLeft.value -= 1;
+    if (idleSecondsLeft.value <= 0) {
+      triggerShutdown();
+    }
+  }, 1000);
+}
+
+// Any keyboard/mouse activity on the login screen resets the idle timer so a
+// customer actively typing credentials is never shut down mid-login.
+function resetIdleCountdown() {
+  if (idleTimer) {
+    idleSecondsLeft.value = IDLE_SHUTDOWN_SECONDS;
+  }
+}
+
+// The PC is "unlocked" only during an active paid session. Every other
+// screen (pairing, lock, expired, loading) keeps the kiosk lock engaged so
+// the customer cannot reach the Windows desktop without time credits.
+// While locked (no account), the idle auto-shutdown countdown runs.
+watch(
+  screen,
+  (current) => {
+    if (current === 'session') {
+      window.pisonet?.releaseLock?.();
+      cancelIdleCountdown();
+    } else {
+      window.pisonet?.engageLock?.();
+      if (current === 'lock' || current === 'expired') {
+        startIdleCountdown();
+      } else {
+        cancelIdleCountdown();
+      }
+    }
+  },
+  { immediate: true }
+);
 
 function clearTimers() {
   if (countdownTimer) clearInterval(countdownTimer);
@@ -137,6 +194,9 @@ function connectSocket() {
       clearTimers();
       resetSession();
       screen.value = 'lock';
+    },
+    onShutdown: () => {
+      triggerShutdown();
     },
   });
 
@@ -244,12 +304,22 @@ onMounted(async () => {
   removeTrayLogout = window.pisonet?.onTrayLogout(() => {
     void handleLogout();
   });
+
+  window.addEventListener('keydown', resetIdleCountdown);
+  window.addEventListener('mousedown', resetIdleCountdown);
+  window.addEventListener('mousemove', resetIdleCountdown);
+  window.addEventListener('touchstart', resetIdleCountdown);
 });
 
 onUnmounted(() => {
   removeTrayLogout?.();
   clearTimers();
+  cancelIdleCountdown();
   socketClient.disconnect();
+  window.removeEventListener('keydown', resetIdleCountdown);
+  window.removeEventListener('mousedown', resetIdleCountdown);
+  window.removeEventListener('mousemove', resetIdleCountdown);
+  window.removeEventListener('touchstart', resetIdleCountdown);
 });
 </script>
 
@@ -310,6 +380,7 @@ onUnmounted(() => {
 
       <button class="primary" :disabled="!connected" @click="handleLogin">Start session</button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
+      <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
 
     <div v-else-if="screen === 'session'" class="card session-card">
@@ -324,6 +395,7 @@ onUnmounted(() => {
       <h1>Time expired</h1>
       <p class="muted">Your session has ended. Please add more time to continue.</p>
       <button class="primary" @click="handleExpiredBackToLogin">Back to login</button>
+      <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
   </div>
 </template>
@@ -353,5 +425,11 @@ h1 {
 .tray-hint {
   font-size: 13px;
   margin: 8px 0 16px;
+}
+
+.idle-hint {
+  font-size: 13px;
+  margin-top: 16px;
+  color: #f59e0b;
 }
 </style>

@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { endSessionSchema } from '@pisonet/shared';
 import { Session } from '../models/Session';
+import { Computer } from '../models/Computer';
 import { validateBody } from '../middleware/validate';
-import { authMiddleware, userMiddleware, AuthRequest } from '../middleware/auth';
+import {
+  authMiddleware,
+  adminMiddleware,
+  userMiddleware,
+  AuthRequest,
+} from '../middleware/auth';
 import { sessionEngine } from '../services/sessionEngine';
 
 export const sessionsRouter = Router();
@@ -49,6 +55,31 @@ sessionsRouter.get('/active', authMiddleware, userMiddleware, async (req: AuthRe
     computerId: active.computerId,
     remainingSeconds: sessionEngine.getRemainingSeconds(active),
   });
+});
+
+sessionsRouter.get('/live', authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    const active = sessionEngine.listActive();
+    const computers = await Computer.find().select('computerCode name').lean();
+    const codeById = new Map(
+      computers.map((c) => [c._id.toString(), c.computerCode || c.name])
+    );
+
+    res.json(
+      active.map((s) => ({
+        sessionId: s.sessionId,
+        userId: s.userId,
+        username: s.username,
+        computerId: s.computerId,
+        computerCode: codeById.get(s.computerId) || s.computerId,
+        remainingSeconds: s.remainingSeconds,
+        startedAt: s.startedAt,
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to list active sessions' });
+  }
 });
 
 sessionsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {

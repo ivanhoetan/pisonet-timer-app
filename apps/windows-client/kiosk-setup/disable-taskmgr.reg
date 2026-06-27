@@ -1,0 +1,5 @@
+Windows Registry Editor Version 5.00
+
+; Disables Task Manager for the CURRENT user (run as the customer account).
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableTaskMgr"=dword:00000001
