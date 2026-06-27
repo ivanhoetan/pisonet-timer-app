@@ -21,13 +21,14 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --include=dev
 
       - name: Build shared + client
         run: npm run build:client
 
       - name: Package Windows installer
-        run: npm run dist:win -w @pisonet/windows-client
+        working-directory: apps/windows-client
+        run: npx electron-builder --win
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

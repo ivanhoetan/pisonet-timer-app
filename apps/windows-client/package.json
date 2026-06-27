@@ -1,6 +1,8 @@
 {
   "name": "@pisonet/windows-client",
   "version": "1.0.0",
+  "description": "Pisonet account-based timer kiosk client for Windows",
+  "author": "ivanhoeytan-mysuki",
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
@@ -17,8 +19,8 @@
     "@pisonet/shared": "*",
     "@vitejs/plugin-vue": "^5.2.1",
     "concurrently": "^9.1.2",
-    "electron": "^34.3.0",
-    "electron-builder": "^25.1.8",
+    "electron": "34.3.0",
+    "electron-builder": "25.1.8",
     "socket.io-client": "^4.8.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.1",
@@ -29,6 +31,7 @@
   "build": {
     "appId": "com.pisonet.timer",
     "productName": "Pisonet Timer",
+    "electronVersion": "34.3.0",
     "directories": {
       "output": "release",
       "buildResources": "build"
