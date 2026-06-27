@@ -1,0 +1,17 @@
+{
+  "name": "pisonet-timer-app",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w @pisonet/server",
+    "dev:client": "npm run dev -w @pisonet/windows-client",
+    "build": "npm run build -w @pisonet/shared && npm run build -w @pisonet/server",
+    "build:client": "npm run build -w @pisonet/shared && npm run build -w @pisonet/windows-client",
+    "dist:client": "npm run build:client && npm run dist:win -w @pisonet/windows-client",
+    "seed": "npm run seed -w @pisonet/server",
+    "start": "npm run start -w @pisonet/server"
+  }
+}

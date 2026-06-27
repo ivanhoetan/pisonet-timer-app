@@ -1,0 +1,37 @@
+name: Build Windows Client
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build shared + client
+        run: npm run build:client
+
+      - name: Package Windows installer
+        run: npm run dist:win -w @pisonet/windows-client
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pisonet-timer-windows-installer
+          path: apps/windows-client/release/*.exe
+          if-no-files-found: error
