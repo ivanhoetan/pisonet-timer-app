@@ -372,6 +372,7 @@ onMounted(load);
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 1">₱1</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 5">₱5</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 10">₱10</button>
+          <button class="btn-ghost btn-sm" @click="form.topupPesos = 12">₱12 · 1 stamp</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 20">₱20</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 50">₱50</button>
         </div>
