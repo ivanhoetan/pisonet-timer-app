@@ -96,6 +96,10 @@ watch(
     if (current === 'session') {
       window.pisonet?.releaseLock?.();
       cancelIdleCountdown();
+      // Default to the sticky mini-timer so the customer can use the PC right
+      // away; they can expand to the full card to log out.
+      minimized.value = true;
+      void window.pisonet?.enterMiniTimer?.();
     } else {
       window.pisonet?.engageLock?.();
       if (current === 'lock' || current === 'expired') {
@@ -469,15 +473,10 @@ onUnmounted(() => {
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
 
-    <!-- Sticky mini-timer: small always-on-top widget while the customer uses the PC -->
-    <div
-      v-if="screen === 'session' && minimized"
-      class="mini-timer"
-      title="Click to open"
-      @click="restoreFromMini"
-    >
+    <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC -->
+    <div v-if="screen === 'session' && minimized" class="mini-timer" title="Drag to move">
       <span class="mini-time">{{ displayTime }}</span>
-      <span class="mini-expand">⤢</span>
+      <button class="mini-expand" title="Open timer" @click="restoreFromMini">⤢</button>
     </div>
 
     <div v-else-if="screen === 'session'" class="card session-card">
@@ -588,7 +587,8 @@ h1 {
   max-width: 220px;
 }
 
-/* Sticky mini-timer fills the tiny always-on-top widget window. */
+/* Sticky mini-timer fills the tiny always-on-top widget window. The whole bar
+   is a drag region so the customer can reposition it anywhere on screen. */
 .mini-timer {
   display: flex;
   align-items: center;
@@ -596,13 +596,14 @@ h1 {
   gap: 10px;
   width: 100%;
   height: 100%;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
   border-radius: 12px;
   background: #111827;
   border: 1px solid #334155;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
   user-select: none;
+  cursor: move;
+  -webkit-app-region: drag;
 }
 
 .mini-timer:hover {
@@ -616,8 +617,25 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+/* Expand button must opt out of the drag region so clicks register. */
 .mini-expand {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   font-size: 18px;
+  line-height: 1;
   color: #94a3b8;
+  background: #1e293b;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mini-expand:hover {
+  color: #f8fafc;
+  background: #334155;
 }
 </style>

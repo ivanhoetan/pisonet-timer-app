@@ -60,6 +60,12 @@ export const createTransactionSchema = z
     message: 'Provide pesos or minutesAdded',
   });
 
+export const adjustTimeSchema = z.object({
+  userId: z.string().min(1),
+  minutesRemoved: z.number().int().positive(),
+  reason: z.string().max(200).optional(),
+});
+
 export const adminLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),

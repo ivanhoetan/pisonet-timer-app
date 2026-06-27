@@ -351,6 +351,30 @@ export class SessionEngine {
     return remainingSeconds;
   }
 
+  async subtractTime(sessionId: string, secondsToRemove: number): Promise<number> {
+    if (secondsToRemove <= 0) {
+      throw new Error('secondsToRemove must be positive');
+    }
+
+    const cached = this.cache.get(sessionId);
+    if (!cached || cached.status !== SessionStatus.ACTIVE) {
+      throw new Error('Session not active');
+    }
+
+    const available = this.getRemainingSeconds(cached);
+    if (secondsToRemove > available) {
+      throw new Error('Cannot remove more than remaining session time');
+    }
+
+    const remainingSeconds = await this.addTime(sessionId, -secondsToRemove);
+    if (remainingSeconds <= 0) {
+      await this.endSession(sessionId, true);
+      return 0;
+    }
+
+    return remainingSeconds;
+  }
+
   async forceLock(computerId: string, reason = 'admin_lock'): Promise<void> {
     const active = this.getByComputerId(computerId);
     if (active) {

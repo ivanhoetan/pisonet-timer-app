@@ -9,7 +9,7 @@ const loading = ref(false);
 const error = ref('');
 const toast = ref('');
 
-type Mode = 'create' | 'edit' | 'topup' | null;
+type Mode = 'create' | 'edit' | 'topup' | 'adjust' | null;
 const mode = ref<Mode>(null);
 const saving = ref(false);
 const formError = ref('');
@@ -23,6 +23,8 @@ const form = ref({
   status: 'active' as 'active' | 'disabled',
   initialMinutes: 0,
   topupPesos: 20,
+  minutesRemoved: 10,
+  adjustReason: '',
   paymentMethod: 'manual',
   paymentReference: '',
 });
@@ -55,6 +57,8 @@ function openCreate() {
     status: 'active',
     initialMinutes: 0,
     topupPesos: 20,
+    minutesRemoved: 10,
+    adjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
   };
@@ -72,6 +76,8 @@ function openEdit(u: AdminUser) {
     status: u.status,
     initialMinutes: 0,
     topupPesos: 20,
+    minutesRemoved: 10,
+    adjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
   };
@@ -87,6 +93,15 @@ function openTopup(u: AdminUser) {
   form.value.paymentReference = '';
   formError.value = '';
   mode.value = 'topup';
+}
+
+function openAdjust(u: AdminUser) {
+  editingId.value = u.id;
+  form.value.username = u.username;
+  form.value.minutesRemoved = 10;
+  form.value.adjustReason = '';
+  formError.value = '';
+  mode.value = 'adjust';
 }
 
 async function submit() {
@@ -120,6 +135,25 @@ async function submit() {
         paymentReference: form.value.paymentReference.trim() || undefined,
       });
       showToast(`Added ${pesosToMinutes(Number(form.value.topupPesos))} min`);
+    } else if (mode.value === 'adjust') {
+      const minutes = Number(form.value.minutesRemoved);
+      if (!minutes || minutes < 1) {
+        formError.value = 'Enter at least 1 minute to remove';
+        return;
+      }
+      if (
+        !confirm(
+          `Remove ${minutes} minute(s) from ${form.value.username}? This cannot be undone automatically.`
+        )
+      ) {
+        return;
+      }
+      await api.post('/transactions/adjust', {
+        userId: editingId.value,
+        minutesRemoved: minutes,
+        reason: form.value.adjustReason.trim() || undefined,
+      });
+      showToast(`Removed ${minutes} min`);
     }
     mode.value = null;
     await load();
@@ -158,51 +192,86 @@ onMounted(load);
 
   <p v-if="error" class="error" style="margin-bottom: 14px">{{ error }}</p>
 
-  <div class="card">
-    <p v-if="loading" class="muted">Loading…</p>
-    <p v-else-if="users.length === 0" class="muted">No users found.</p>
-    <div v-else class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Balance</th>
-            <th>Mobile</th>
-            <th>Status</th>
-            <th>Session</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id">
-            <td>{{ u.username }}</td>
-            <td>{{ formatDuration(u.balanceSeconds) }}</td>
-            <td>{{ u.mobileNumber || '—' }}</td>
-            <td><span class="badge" :class="u.status">{{ u.status }}</span></td>
-            <td>
-              <span v-if="u.activeSession" class="badge inuse">online</span>
-              <span v-else class="muted">—</span>
-            </td>
-            <td>
-              <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
-                <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
-                <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
-                <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
-                  {{ u.status === 'active' ? 'Disable' : 'Enable' }}
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+  <p v-if="loading && users.length === 0" class="muted">Loading…</p>
+  <p v-else-if="users.length === 0" class="muted">No users found.</p>
+
+  <template v-else>
+    <!-- Desktop: dense table -->
+    <div class="card users-table-card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Balance</th>
+              <th>Mobile</th>
+              <th>Status</th>
+              <th>Session</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id">
+              <td>{{ u.username }}</td>
+              <td>{{ formatDuration(u.balanceSeconds) }}</td>
+              <td>{{ u.mobileNumber || '—' }}</td>
+              <td><span class="badge" :class="u.status">{{ u.status }}</span></td>
+              <td>
+                <span v-if="u.activeSession" class="badge inuse">online</span>
+                <span v-else class="muted">—</span>
+              </td>
+              <td>
+                <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
+                  <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
+                  <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+                  <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
+                  <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
+                    {{ u.status === 'active' ? 'Disable' : 'Enable' }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+
+    <!-- Mobile: stacked cards -->
+    <div class="user-cards">
+      <div v-for="u in users" :key="u.id" class="card user-card">
+        <div class="uc-head">
+          <span class="uc-name">{{ u.username }}</span>
+          <div class="uc-badges">
+            <span v-if="u.activeSession" class="badge inuse">online</span>
+            <span class="badge" :class="u.status">{{ u.status }}</span>
+          </div>
+        </div>
+        <div class="uc-balance">
+          <span class="uc-balance-value">{{ formatDuration(u.balanceSeconds) }}</span>
+          <span class="uc-balance-label">remaining</span>
+        </div>
+        <div class="uc-row">
+          <span class="uc-label">Mobile</span>
+          <span class="uc-val">{{ u.mobileNumber || '—' }}</span>
+        </div>
+        <div class="uc-actions">
+          <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
+          <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+          <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
+          <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
+            {{ u.status === 'active' ? 'Disable' : 'Enable' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
 
   <!-- Create / Edit / Top-up modal -->
   <div v-if="mode" class="modal-backdrop" @click.self="mode = null">
     <div class="card modal">
       <h3 v-if="mode === 'create'">New user</h3>
       <h3 v-else-if="mode === 'edit'">Edit {{ form.username }}</h3>
+      <h3 v-else-if="mode === 'adjust'">Remove time — {{ form.username }}</h3>
       <h3 v-else>Add time — {{ form.username }}</h3>
 
       <template v-if="mode === 'create' || mode === 'edit'">
@@ -235,7 +304,7 @@ onMounted(load);
         </label>
       </template>
 
-      <template v-else>
+      <template v-else-if="mode === 'topup'">
         <p class="muted" style="margin-top: -8px">₱1 = 5 minutes.</p>
         <label class="field">
           <span>Amount paid (₱)</span>
@@ -265,12 +334,39 @@ onMounted(load);
         </label>
       </template>
 
+      <template v-else-if="mode === 'adjust'">
+        <p class="muted" style="margin-top: -8px">
+          Correct a mistaken top-up. Balance cannot go below zero. If the user is online, their live
+          timer is reduced too.
+        </p>
+        <label class="field">
+          <span>Minutes to remove</span>
+          <input v-model.number="form.minutesRemoved" type="number" min="1" />
+        </label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+          <button class="btn-ghost btn-sm" @click="form.minutesRemoved = 5">5 min</button>
+          <button class="btn-ghost btn-sm" @click="form.minutesRemoved = 10">10 min</button>
+          <button class="btn-ghost btn-sm" @click="form.minutesRemoved = 30">30 min</button>
+          <button class="btn-ghost btn-sm" @click="form.minutesRemoved = 60">60 min</button>
+        </div>
+        <label class="field">
+          <span>Reason (optional)</span>
+          <input v-model="form.adjustReason" placeholder="e.g. wrong amount entered" />
+        </label>
+      </template>
+
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
 
       <div class="modal-actions">
         <button class="btn-ghost" @click="mode = null">Cancel</button>
         <button class="btn-primary" :disabled="saving" @click="submit">
-          {{ saving ? 'Saving…' : 'Save' }}
+          {{
+            saving
+              ? 'Saving…'
+              : mode === 'adjust'
+                ? 'Remove time'
+                : 'Save'
+          }}
         </button>
       </div>
     </div>

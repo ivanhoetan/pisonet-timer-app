@@ -14,6 +14,13 @@ const topupPesos = ref(20);
 const topupSaving = ref(false);
 const topupError = ref('');
 
+// Time removal modal state
+const adjustFor = ref<LiveSession | null>(null);
+const minutesRemoved = ref(10);
+const adjustReason = ref('');
+const adjustSaving = ref(false);
+const adjustError = ref('');
+
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -73,6 +80,46 @@ async function submitTopup() {
     topupError.value = err instanceof ApiError ? err.message : 'Top-up failed';
   } finally {
     topupSaving.value = false;
+  }
+}
+
+function openAdjust(s: LiveSession) {
+  adjustFor.value = s;
+  minutesRemoved.value = 10;
+  adjustReason.value = '';
+  adjustError.value = '';
+}
+
+async function submitAdjust() {
+  if (!adjustFor.value) return;
+  const minutes = Number(minutesRemoved.value);
+  if (!minutes || minutes < 1) {
+    adjustError.value = 'Enter at least 1 minute to remove';
+    return;
+  }
+  if (
+    !confirm(
+      `Remove ${minutes} minute(s) from ${adjustFor.value.username}? Their live timer will be reduced.`
+    )
+  ) {
+    return;
+  }
+
+  adjustSaving.value = true;
+  adjustError.value = '';
+  try {
+    await api.post('/transactions/adjust', {
+      userId: adjustFor.value.userId,
+      minutesRemoved: minutes,
+      reason: adjustReason.value.trim() || undefined,
+    });
+    showToast(`Removed ${minutes} min from ${adjustFor.value.username}`);
+    adjustFor.value = null;
+    await refresh();
+  } catch (err) {
+    adjustError.value = err instanceof ApiError ? err.message : 'Adjustment failed';
+  } finally {
+    adjustSaving.value = false;
   }
 }
 
@@ -155,8 +202,9 @@ onUnmounted(() => {
               {{ formatClock(s.remainingSeconds) }}
             </td>
             <td>
-              <div style="display: flex; gap: 8px; justify-content: flex-end">
+              <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
                 <button class="btn-ghost btn-sm" @click="openTopup(s)">+ Time</button>
+                <button class="btn-warning btn-sm" @click="openAdjust(s)">− Time</button>
                 <button class="btn-danger btn-sm" @click="lockComputer(s)">Lock</button>
               </div>
             </td>
@@ -190,6 +238,30 @@ onUnmounted(() => {
         <button class="btn-ghost" @click="topupFor = null">Cancel</button>
         <button class="btn-primary" :disabled="topupSaving" @click="submitTopup">
           {{ topupSaving ? 'Adding…' : 'Add time' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="adjustFor" class="modal-backdrop" @click.self="adjustFor = null">
+    <div class="card modal">
+      <h3>Remove time — {{ adjustFor.username }}</h3>
+      <p class="muted" style="margin-top: -8px">
+        Currently has {{ formatClock(adjustFor.remainingSeconds) }} left on {{ adjustFor.computerCode }}.
+      </p>
+      <label class="field">
+        <span>Minutes to remove</span>
+        <input v-model.number="minutesRemoved" type="number" min="1" />
+      </label>
+      <label class="field">
+        <span>Reason (optional)</span>
+        <input v-model="adjustReason" placeholder="e.g. wrong amount entered" />
+      </label>
+      <p v-if="adjustError" class="error" style="margin-bottom: 12px">{{ adjustError }}</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" @click="adjustFor = null">Cancel</button>
+        <button class="btn-warning" :disabled="adjustSaving" @click="submitAdjust">
+          {{ adjustSaving ? 'Removing…' : 'Remove time' }}
         </button>
       </div>
     </div>

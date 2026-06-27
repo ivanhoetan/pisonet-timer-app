@@ -12,8 +12,15 @@ function usernameOf(t: Transaction): string {
   return '—';
 }
 
-const totalMinutes = computed(() =>
-  transactions.value.reduce((sum, t) => sum + (t.minutesAdded || 0), 0)
+const totalAdded = computed(() =>
+  transactions.value.reduce((sum, t) => sum + (t.minutesAdded > 0 ? t.minutesAdded : 0), 0)
+);
+
+const totalRemoved = computed(() =>
+  transactions.value.reduce(
+    (sum, t) => sum + (t.minutesAdded < 0 ? Math.abs(t.minutesAdded) : 0),
+    0
+  )
 );
 
 const totalRevenue = computed(() =>
@@ -38,13 +45,14 @@ onMounted(load);
 
 <template>
   <h1 class="page-title">Transactions</h1>
-  <p class="page-sub">Most recent 100 time top-ups.</p>
+  <p class="page-sub">Most recent 100 time changes (top-ups and corrections).</p>
 
   <div class="toolbar">
     <button class="btn-ghost" @click="load">Refresh</button>
     <div class="spacer"></div>
     <span class="muted">
-      {{ transactions.length }} records · {{ totalMinutes }} min · {{ formatPesos(totalRevenue) }}
+      {{ transactions.length }} records · +{{ totalAdded }} / −{{ totalRemoved }} min ·
+      {{ formatPesos(totalRevenue) }}
     </span>
   </div>
 
@@ -69,7 +77,9 @@ onMounted(load);
           <tr v-for="t in transactions" :key="t._id">
             <td>{{ formatDateTime(t.createdAt) }}</td>
             <td>{{ usernameOf(t) }}</td>
-            <td>+{{ t.minutesAdded }}</td>
+            <td :class="{ 'tx-negative': t.minutesAdded < 0 }">
+              {{ t.minutesAdded > 0 ? `+${t.minutesAdded}` : t.minutesAdded }}
+            </td>
             <td>{{ t.amountPaid ? formatPesos(t.amountPaid) : '—' }}</td>
             <td>{{ t.paymentMethod }}</td>
             <td>{{ t.paymentReference || '—' }}</td>

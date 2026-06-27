@@ -9,6 +9,7 @@ const error = ref('');
 
 const ACTION_LABELS: Record<string, string> = {
   topup: 'Top-up',
+  time_adjust: 'Time removed',
   user_create: 'User created',
   user_update: 'User updated',
   computer_register: 'PC registered',

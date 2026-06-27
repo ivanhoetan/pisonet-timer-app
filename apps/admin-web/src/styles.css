@@ -316,6 +316,11 @@ th {
   color: var(--muted);
 }
 
+.tx-negative {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
@@ -390,6 +395,87 @@ th {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.computer-card .cc-actions button {
+  flex: 1 1 auto;
+}
+
+/* ---- User cards (mobile) ---- */
+.user-cards {
+  display: none;
+}
+
+.user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-card .uc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-card .uc-name {
+  font-weight: 700;
+  font-size: 18px;
+  word-break: break-all;
+}
+
+.user-card .uc-badges {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.user-card .uc-balance {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.user-card .uc-balance-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.user-card .uc-balance-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.user-card .uc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.user-card .uc-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.user-card .uc-val {
+  font-weight: 500;
+}
+
+.user-card .uc-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.user-card .uc-actions button {
+  flex: 1;
+  min-width: 80px;
 }
 
 .center-screen {
@@ -432,5 +518,30 @@ th {
   }
   .content {
     padding: 16px;
+  }
+
+  /* Swap the dense Users table for stacked cards. */
+  .users-table-card {
+    display: none;
+  }
+  .user-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* Full-width search controls so they don't crowd on narrow screens. */
+  .toolbar {
+    gap: 10px;
+  }
+  .toolbar input {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+  .toolbar .spacer {
+    display: none;
+  }
+  .toolbar .btn-primary {
+    flex: 1 1 100%;
   }
 }

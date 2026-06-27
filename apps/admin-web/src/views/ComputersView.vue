@@ -150,8 +150,6 @@ onUnmounted(() => {
         >
           Shut down
         </button>
-      </div>
-      <div class="cc-actions">
         <button
           class="btn-ghost btn-sm"
           :disabled="c.status === 'OFFLINE'"

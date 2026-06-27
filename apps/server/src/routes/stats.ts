@@ -35,8 +35,15 @@ statsRouter.get('/overview', authMiddleware, adminMiddleware, async (_req, res) 
       { ONLINE: 0, OFFLINE: 0, IN_USE: 0, LOCKED: 0 }
     );
 
-    const minutesSoldToday = todayTransactions.reduce((sum, t) => sum + (t.minutesAdded || 0), 0);
-    const revenueToday = todayTransactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+    const minutesSoldToday = todayTransactions.reduce(
+      (sum, t) => sum + (t.minutesAdded > 0 ? t.minutesAdded : 0),
+      0
+    );
+    const revenueToday = todayTransactions.reduce(
+      (sum, t) => sum + (t.amountPaid && t.amountPaid > 0 ? t.amountPaid : 0),
+      0
+    );
+    const topupsToday = todayTransactions.filter((t) => t.minutesAdded > 0).length;
 
     res.json({
       users: {
@@ -53,7 +60,7 @@ statsRouter.get('/overview', authMiddleware, adminMiddleware, async (_req, res) 
       },
       activeSessions: sessionEngine.countActive(),
       today: {
-        topups: todayTransactions.length,
+        topups: topupsToday,
         minutesSold: minutesSoldToday,
         revenue: revenueToday,
       },
