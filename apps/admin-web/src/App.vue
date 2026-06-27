@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { auth, clearSession } from './lib/auth';
+import NavIcon from './components/NavIcon.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,14 +21,14 @@ watch(
 const showShell = computed(() => route.name !== 'login' && Boolean(auth.token));
 
 const links = [
-  { name: 'dashboard', label: 'Dashboard', icon: '▦' },
-  { name: 'users', label: 'Users', icon: '◉' },
-  { name: 'computers', label: 'Computers', icon: '▢' },
-  { name: 'transactions', label: 'Transactions', icon: '₱' },
-  { name: 'reports', label: 'Reports', icon: '▤' },
-  { name: 'loyalty', label: 'Loyalty', icon: '✦' },
-  { name: 'audit', label: 'Audit log', icon: '☰' },
-  { name: 'admins', label: 'Admins', icon: '◈' },
+  { name: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { name: 'users', label: 'Users', icon: 'users' },
+  { name: 'computers', label: 'Computers', icon: 'computers' },
+  { name: 'transactions', label: 'Transactions', icon: 'transactions' },
+  { name: 'reports', label: 'Reports', icon: 'reports' },
+  { name: 'loyalty', label: 'Loyalty', icon: 'loyalty' },
+  { name: 'audit', label: 'Audit log', icon: 'audit' },
+  { name: 'admins', label: 'Admins', icon: 'admins' },
 ];
 
 function logout() {
@@ -56,7 +57,7 @@ function go(name: string) {
         :class="{ active: route.name === link.name }"
         @click="go(link.name)"
       >
-        <span>{{ link.icon }}</span>
+        <NavIcon :name="link.icon" />
         <span>{{ link.label }}</span>
       </a>
 
