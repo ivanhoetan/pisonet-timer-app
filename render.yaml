@@ -3,7 +3,7 @@ services:
     name: pisonet-timer-api
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build -w @pisonet/shared && npm run build -w @pisonet/server
+    buildCommand: npm install --include=dev && npm run build -w @pisonet/shared && npm run build -w @pisonet/server
     startCommand: npm run start -w @pisonet/server
     healthCheckPath: /health
     envVars:
