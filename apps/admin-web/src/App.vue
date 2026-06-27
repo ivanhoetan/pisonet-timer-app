@@ -25,6 +25,7 @@ const links = [
   { name: 'computers', label: 'Computers', icon: '▢' },
   { name: 'transactions', label: 'Transactions', icon: '₱' },
   { name: 'reports', label: 'Reports', icon: '▤' },
+  { name: 'loyalty', label: 'Loyalty', icon: '✦' },
   { name: 'audit', label: 'Audit log', icon: '☰' },
   { name: 'admins', label: 'Admins', icon: '◈' },
 ];

@@ -150,3 +150,36 @@ export interface EodReport {
     paymentReference: string;
   }>;
 }
+
+export interface LoyaltyReport {
+  start: string;
+  end: string;
+  summary: {
+    stampsEarned: number;
+    stampsRedeemed: number;
+    rewardsRedeemed: number;
+    pointsAwarded: number;
+    earnEventCount: number;
+    redeemEventCount: number;
+  };
+  outstanding: {
+    totalStamps: number;
+    totalPoints: number;
+    usersWithStamps: number;
+    redeemableRewards: number;
+  };
+  byUser: Array<{
+    username: string;
+    stampsEarned: number;
+    stampsRedeemed: number;
+    rewardsRedeemed: number;
+  }>;
+  events: Array<{
+    createdAt: string;
+    username: string;
+    type: 'earn' | 'redeem';
+    stamps: number;
+    rewards: number;
+    minutes: number;
+  }>;
+}
