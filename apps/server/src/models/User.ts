@@ -7,6 +7,8 @@ export interface IUser extends Document {
   balanceSeconds: number;
   mobileNumber?: string;
   status: 'active' | 'disabled';
+  loyaltyStamps: number;
+  points: number;
   createdAt: Date;
 }
 
@@ -18,6 +20,10 @@ const userSchema = new Schema<IUser>(
     balanceSeconds: { type: Number, required: true, default: 0 },
     mobileNumber: { type: String },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
+    // Loyalty: unredeemed stamps (1 per ₱12 within a single payment).
+    loyaltyStamps: { type: Number, required: true, default: 0 },
+    // Lifetime reward points: +1 per free hour redeemed. Used for monthly bonuses.
+    points: { type: Number, required: true, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );

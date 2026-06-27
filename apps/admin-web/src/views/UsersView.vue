@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError, type AdminUser } from '../lib/api';
-import { formatDuration, pesosToMinutes } from '../lib/format';
+import {
+  formatDuration,
+  pesosToMinutes,
+  rewardsAvailable,
+  STAMPS_PER_REWARD,
+} from '../lib/format';
 
 const users = ref<AdminUser[]>([]);
 const search = ref('');
@@ -176,6 +181,23 @@ async function toggleStatus(u: AdminUser) {
   }
 }
 
+async function redeemReward(u: AdminUser) {
+  const available = rewardsAvailable(u.loyaltyStamps);
+  if (available <= 0) return;
+  const msg =
+    available === 1
+      ? `Redeem ${STAMPS_PER_REWARD} stamps for 1 free hour for ${u.username}?`
+      : `Redeem all ${available} free hours (${available * STAMPS_PER_REWARD} stamps) for ${u.username}?`;
+  if (!confirm(msg)) return;
+  try {
+    await api.post('/loyalty/redeem', { userId: u.id });
+    showToast(`Redeemed ${available} free hour(s) for ${u.username}`);
+    await load();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Redeem failed');
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -204,6 +226,8 @@ onMounted(load);
             <tr>
               <th>Username</th>
               <th>Balance</th>
+              <th>Stamps</th>
+              <th>Points</th>
               <th>Mobile</th>
               <th>Status</th>
               <th>Session</th>
@@ -214,6 +238,13 @@ onMounted(load);
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.username }}</td>
               <td>{{ formatDuration(u.balanceSeconds) }}</td>
+              <td>
+                <span class="stamp-count">{{ u.loyaltyStamps }}</span>
+                <span v-if="rewardsAvailable(u.loyaltyStamps) > 0" class="badge reward">
+                  {{ rewardsAvailable(u.loyaltyStamps) }} free hr
+                </span>
+              </td>
+              <td><span class="stamp-count">{{ u.points }}</span></td>
               <td>{{ u.mobileNumber || '—' }}</td>
               <td><span class="badge" :class="u.status">{{ u.status }}</span></td>
               <td>
@@ -224,6 +255,13 @@ onMounted(load);
                 <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
                   <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
                   <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+                  <button
+                    v-if="rewardsAvailable(u.loyaltyStamps) > 0"
+                    class="btn-success btn-sm"
+                    @click="redeemReward(u)"
+                  >
+                    Redeem
+                  </button>
                   <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
                   <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
                     {{ u.status === 'active' ? 'Disable' : 'Enable' }}
@@ -254,9 +292,29 @@ onMounted(load);
           <span class="uc-label">Mobile</span>
           <span class="uc-val">{{ u.mobileNumber || '—' }}</span>
         </div>
+        <div class="uc-row">
+          <span class="uc-label">Stamps</span>
+          <span class="uc-val">
+            {{ u.loyaltyStamps }}
+            <span v-if="rewardsAvailable(u.loyaltyStamps) > 0" class="badge reward">
+              {{ rewardsAvailable(u.loyaltyStamps) }} free hr
+            </span>
+          </span>
+        </div>
+        <div class="uc-row">
+          <span class="uc-label">Points</span>
+          <span class="uc-val">{{ u.points }}</span>
+        </div>
         <div class="uc-actions">
           <button class="btn-primary btn-sm" @click="openTopup(u)">+ Time</button>
           <button class="btn-warning btn-sm" @click="openAdjust(u)">− Time</button>
+          <button
+            v-if="rewardsAvailable(u.loyaltyStamps) > 0"
+            class="btn-success btn-sm"
+            @click="redeemReward(u)"
+          >
+            Redeem
+          </button>
           <button class="btn-ghost btn-sm" @click="openEdit(u)">Edit</button>
           <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
             {{ u.status === 'active' ? 'Disable' : 'Enable' }}

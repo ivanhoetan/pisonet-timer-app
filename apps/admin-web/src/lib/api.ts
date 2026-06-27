@@ -68,6 +68,8 @@ export interface AdminUser {
   balanceSeconds: number;
   mobileNumber?: string;
   status: 'active' | 'disabled';
+  loyaltyStamps: number;
+  points: number;
   createdAt: string;
   activeSession: ActiveSessionInfo | null;
 }

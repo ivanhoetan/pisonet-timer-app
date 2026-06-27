@@ -39,6 +39,7 @@ export interface StartSessionPayload {
   username: string;
   remainingSeconds: number;
   startedAt: string;
+  loyaltyStamps?: number;
 }
 
 export interface AddTimePayload {

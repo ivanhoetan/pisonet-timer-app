@@ -13,6 +13,7 @@ export interface ActiveSessionCache {
   startedAt: Date;
   secondsAllocated: number;
   status: SessionStatus;
+  loyaltyStamps: number;
 }
 
 export class ActiveSessionError extends Error {
@@ -44,13 +45,17 @@ export class SessionEngine {
 
   async rehydrate(): Promise<void> {
     const activeSessions = await Session.find({ status: SessionStatus.ACTIVE })
-      .populate('userId', 'username')
+      .populate('userId', 'username loyaltyStamps')
       .lean();
 
     this.cache.clear();
 
     for (const session of activeSessions) {
-      const user = session.userId as unknown as { _id: Types.ObjectId; username: string };
+      const user = session.userId as unknown as {
+        _id: Types.ObjectId;
+        username: string;
+        loyaltyStamps?: number;
+      };
       this.cache.set(session._id.toString(), {
         sessionId: session._id.toString(),
         userId: user._id.toString(),
@@ -59,6 +64,7 @@ export class SessionEngine {
         startedAt: session.startedAt,
         secondsAllocated: session.secondsAllocated,
         status: SessionStatus.ACTIVE,
+        loyaltyStamps: user.loyaltyStamps ?? 0,
       });
     }
 
@@ -106,7 +112,11 @@ export class SessionEngine {
     return undefined;
   }
 
-  private toCacheEntry(session: ISession, username: string): ActiveSessionCache {
+  private toCacheEntry(
+    session: ISession,
+    username: string,
+    loyaltyStamps = 0
+  ): ActiveSessionCache {
     return {
       sessionId: session._id.toString(),
       userId: session.userId.toString(),
@@ -115,6 +125,7 @@ export class SessionEngine {
       startedAt: session.startedAt,
       secondsAllocated: session.secondsAllocated,
       status: SessionStatus.ACTIVE,
+      loyaltyStamps,
     };
   }
 
@@ -123,6 +134,7 @@ export class SessionEngine {
     username: string;
     computerId: string;
     balanceSeconds: number;
+    loyaltyStamps?: number;
   }): Promise<{ session: ISession; remainingSeconds: number }> {
     const existingUserSession = await Session.findOne({
       userId: params.userId,
@@ -135,7 +147,7 @@ export class SessionEngine {
 
       let entry = this.cache.get(sessionId);
       if (!entry) {
-        entry = this.toCacheEntry(existingUserSession, params.username);
+        entry = this.toCacheEntry(existingUserSession, params.username, params.loyaltyStamps ?? 0);
         this.cache.set(sessionId, entry);
       }
 
@@ -186,7 +198,7 @@ export class SessionEngine {
       throw err;
     }
 
-    const cacheEntry = this.toCacheEntry(session, params.username);
+    const cacheEntry = this.toCacheEntry(session, params.username, params.loyaltyStamps ?? 0);
     this.cache.set(session._id.toString(), cacheEntry);
 
     await Computer.findByIdAndUpdate(params.computerId, {
@@ -427,6 +439,7 @@ export class SessionEngine {
       username: session.username,
       remainingSeconds,
       startedAt: session.startedAt.toISOString(),
+      loyaltyStamps: session.loyaltyStamps,
     });
   }
 

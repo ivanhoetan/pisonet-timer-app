@@ -24,6 +24,14 @@ export function pesosToMinutes(pesos: number): number {
   return Math.round(pesos * MINUTES_PER_PESO);
 }
 
+// Loyalty stamp card (mirrors server constants in @pisonet/shared).
+export const STAMPS_PER_REWARD = 5;
+export const REWARD_MINUTES = 60;
+
+export function rewardsAvailable(stamps: number): number {
+  return Math.floor(stamps / STAMPS_PER_REWARD);
+}
+
 export function formatPesos(amount: number): string {
   return `\u20b1${amount.toLocaleString(undefined, {
     minimumFractionDigits: 0,

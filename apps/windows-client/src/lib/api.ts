@@ -49,6 +49,7 @@ export interface PinLoginResponse {
   sessionId: string;
   remainingSeconds: number;
   username: string;
+  loyaltyStamps: number;
 }
 
 export async function pinLogin(

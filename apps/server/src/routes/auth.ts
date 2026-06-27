@@ -122,6 +122,7 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
       username: user.username,
       computerId,
       balanceSeconds: user.balanceSeconds,
+      loyaltyStamps: user.loyaltyStamps,
     });
 
     const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
@@ -131,6 +132,7 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
       sessionId: session._id,
       remainingSeconds,
       username: user.username,
+      loyaltyStamps: user.loyaltyStamps,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed';

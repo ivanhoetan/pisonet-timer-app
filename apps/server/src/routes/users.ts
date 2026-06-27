@@ -17,6 +17,8 @@ function serializeUser(user: IUser) {
     balanceSeconds: user.balanceSeconds,
     mobileNumber: user.mobileNumber,
     status: user.status,
+    loyaltyStamps: user.loyaltyStamps,
+    points: user.points,
     createdAt: user.createdAt,
     activeSession: active
       ? {

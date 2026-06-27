@@ -10,6 +10,7 @@ const error = ref('');
 const ACTION_LABELS: Record<string, string> = {
   topup: 'Top-up',
   time_adjust: 'Time removed',
+  loyalty_redeem: 'Loyalty redeemed',
   user_create: 'User created',
   user_update: 'User updated',
   admin_create: 'Admin created',

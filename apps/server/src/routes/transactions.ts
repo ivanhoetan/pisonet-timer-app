@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { adjustTimeSchema, createTransactionSchema, pesosToMinutes } from '@pisonet/shared';
+import {
+  adjustTimeSchema,
+  createTransactionSchema,
+  pesosToMinutes,
+  PESOS_PER_STAMP,
+} from '@pisonet/shared';
 import { Transaction } from '../models/Transaction';
 import { User } from '../models/User';
 import { validateBody } from '../middleware/validate';
@@ -31,6 +36,16 @@ transactionsRouter.post(
       }
 
       user.balanceSeconds += secondsAdded;
+
+      // Loyalty: a stamp is earned per full PESOS_PER_STAMP within a SINGLE
+      // payment only. Leftover pesos do not carry over to future top-ups
+      // (e.g. ₱6 earns nothing; one ₱24 payment earns 2 stamps).
+      let stampsEarned = 0;
+      if (amountPaid > 0) {
+        stampsEarned = Math.floor(amountPaid / PESOS_PER_STAMP);
+        user.loyaltyStamps += stampsEarned;
+      }
+
       await user.save();
 
       const transaction = await Transaction.create({
@@ -54,13 +69,16 @@ transactionsRouter.post(
         targetLabel: user.username,
         details:
           amountPaid > 0
-            ? `+${minutesAdded} min for \u20b1${amountPaid} (${paymentMethod})`
+            ? `+${minutesAdded} min for \u20b1${amountPaid} (${paymentMethod})` +
+              (stampsEarned > 0 ? ` · +${stampsEarned} stamp(s)` : '')
             : `+${minutesAdded} min (free grant)`,
       });
 
       res.status(201).json({
         transaction,
         newBalanceSeconds: user.balanceSeconds,
+        loyaltyStamps: user.loyaltyStamps,
+        stampsEarned,
       });
     } catch (err) {
       console.error(err);

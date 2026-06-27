@@ -77,6 +77,11 @@ export const adminCreateSchema = z.object({
   role: z.enum(['owner', 'staff']).optional(),
 });
 
+export const redeemLoyaltySchema = z.object({
+  userId: z.string().min(1),
+  rewards: z.number().int().positive().optional(),
+});
+
 export const maintenanceSchema = z.object({
   enabled: z.boolean(),
 });

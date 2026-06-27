@@ -79,6 +79,12 @@ button:not(:disabled):hover {
   font-weight: 600;
 }
 
+.btn-success {
+  background: var(--success);
+  color: #052e16;
+  font-weight: 600;
+}
+
 .btn-sm {
   padding: 7px 12px;
   font-size: 13px;
@@ -314,6 +320,17 @@ th {
 .badge.disabled {
   background: rgba(148, 163, 184, 0.18);
   color: var(--muted);
+}
+
+.badge.reward {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  margin-left: 6px;
+}
+
+.stamp-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .tx-negative {

@@ -40,6 +40,14 @@ const sessionToken = ref('');
 const username = ref('');
 const remainingSeconds = ref(0);
 const startedAt = ref<Date | null>(null);
+const loyaltyStamps = ref(0);
+
+// Loyalty: 5 stamps = 1 free hour. Mirrors the server constant.
+const STAMPS_PER_REWARD = 5;
+const stampsToNextReward = computed(
+  () => (STAMPS_PER_REWARD - (loyaltyStamps.value % STAMPS_PER_REWARD)) % STAMPS_PER_REWARD
+);
+const freeHoursAvailable = computed(() => Math.floor(loyaltyStamps.value / STAMPS_PER_REWARD));
 
 // When no one is logged in, the PC auto-shuts-down after this many idle seconds.
 const IDLE_SHUTDOWN_SECONDS = 60;
@@ -137,6 +145,7 @@ function resetSession() {
   username.value = '';
   remainingSeconds.value = 0;
   startedAt.value = null;
+  loyaltyStamps.value = 0;
   loginError.value = '';
 }
 
@@ -191,6 +200,9 @@ function connectSocket() {
       username.value = payload.username;
       remainingSeconds.value = payload.remainingSeconds;
       startedAt.value = new Date(payload.startedAt);
+      if (typeof payload.loyaltyStamps === 'number') {
+        loyaltyStamps.value = payload.loyaltyStamps;
+      }
       if (!lastCredentials.value.username) {
         lastCredentials.value.username = payload.username;
       }
@@ -276,6 +288,7 @@ async function handleLogin() {
     sessionToken.value = result.token;
     username.value = result.username;
     remainingSeconds.value = result.remainingSeconds;
+    loyaltyStamps.value = result.loyaltyStamps ?? 0;
     startedAt.value = new Date();
     screen.value = 'session';
     startCountdown();
@@ -496,6 +509,32 @@ onUnmounted(() => {
       <p class="muted">Logged in as {{ username }}</p>
       <div class="timer-display">{{ displayTime }}</div>
       <p class="muted">Time remaining</p>
+
+      <div class="loyalty-box">
+        <div class="loyalty-head">
+          <span class="loyalty-title">Loyalty stamps</span>
+          <span class="loyalty-count">{{ loyaltyStamps }}</span>
+        </div>
+        <div class="loyalty-dots">
+          <span
+            v-for="i in STAMPS_PER_REWARD"
+            :key="i"
+            class="loyalty-dot"
+            :class="{ filled: i <= loyaltyStamps % STAMPS_PER_REWARD }"
+          ></span>
+        </div>
+        <p class="loyalty-note">
+          <template v-if="freeHoursAvailable > 0">
+            You have {{ freeHoursAvailable }} free hour<span v-if="freeHoursAvailable > 1">s</span>
+            ready — ask staff to redeem.
+          </template>
+          <template v-else>
+            {{ stampsToNextReward }} more stamp<span v-if="stampsToNextReward > 1">s</span> for 1
+            free hour.
+          </template>
+        </p>
+      </div>
+
       <p class="muted tray-hint">
         Minimize to keep using the PC — a small timer stays on top of your screen.
       </p>
@@ -587,6 +626,61 @@ h1 {
   gap: 12px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.loyalty-box {
+  margin: 18px auto 4px;
+  max-width: 360px;
+  padding: 14px 16px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 12px;
+}
+
+.loyalty-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.loyalty-title {
+  font-size: 14px;
+  color: #fde047;
+  font-weight: 600;
+}
+
+.loyalty-count {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fde047;
+  font-variant-numeric: tabular-nums;
+}
+
+.loyalty-dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.loyalty-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(234, 179, 8, 0.5);
+  background: transparent;
+}
+
+.loyalty-dot.filled {
+  background: #eab308;
+  border-color: #eab308;
+}
+
+.loyalty-note {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+  text-align: center;
 }
 
 .session-actions {
