@@ -363,6 +363,21 @@ export class SessionEngine {
     await Computer.findByIdAndUpdate(computerId, { status: 'LOCKED' });
   }
 
+  async setMaintenance(computerId: string, enabled: boolean): Promise<void> {
+    if (enabled) {
+      // Free access for servicing: end any paid session (time saved) first.
+      const active = this.getByComputerId(computerId);
+      if (active) {
+        await this.pauseSession(active.sessionId);
+      }
+      await Computer.findByIdAndUpdate(computerId, { status: 'MAINTENANCE' });
+      this.io?.to(`computer:${computerId}`).emit(WsEvents.MAINTENANCE_MODE, { enabled: true });
+    } else {
+      await Computer.findByIdAndUpdate(computerId, { status: 'ONLINE' });
+      this.io?.to(`computer:${computerId}`).emit(WsEvents.MAINTENANCE_MODE, { enabled: false });
+    }
+  }
+
   async shutdownComputer(computerId: string, reason = 'admin_shutdown'): Promise<void> {
     const active = this.getByComputerId(computerId);
     if (active) {

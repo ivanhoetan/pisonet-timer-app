@@ -3,6 +3,7 @@ export interface PairingConfig {
   computerId: string;
   authSecret: string;
   computerCode?: string;
+  maintenanceCode?: string;
 }
 
 export interface PisonetBridge {
@@ -13,7 +14,14 @@ export interface PisonetBridge {
   engageLock: () => Promise<boolean>;
   releaseLock: () => Promise<boolean>;
   shutdown: () => Promise<boolean>;
+  enterMaintenance: () => Promise<boolean>;
+  exitMaintenance: () => Promise<boolean>;
+  enterMiniTimer: () => Promise<boolean>;
+  exitMiniTimer: () => Promise<boolean>;
+  quitApp: () => Promise<boolean>;
   onTrayLogout: (callback: () => void) => () => void;
+  onMaintenancePrompt: (callback: () => void) => () => void;
+  onSessionMinimize: (callback: () => void) => () => void;
 }
 
 declare global {

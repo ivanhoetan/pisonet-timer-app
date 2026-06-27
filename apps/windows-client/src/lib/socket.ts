@@ -9,6 +9,7 @@ const WsEvents = {
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   FORCE_LOCK: 'FORCE_LOCK',
   SHUTDOWN: 'SHUTDOWN',
+  MAINTENANCE_MODE: 'MAINTENANCE_MODE',
   HEARTBEAT: 'HEARTBEAT',
 } as const;
 
@@ -33,6 +34,7 @@ export class SocketClient {
       onSessionExpired?: VoidHandler;
       onForceLock?: VoidHandler;
       onShutdown?: VoidHandler;
+      onMaintenance?: (payload?: { enabled?: boolean }) => void;
     }
   ): void {
     this.disconnect();
@@ -83,6 +85,10 @@ export class SocketClient {
 
     this.socket.on(WsEvents.SHUTDOWN, (payload) => {
       handlers.onShutdown?.(payload);
+    });
+
+    this.socket.on(WsEvents.MAINTENANCE_MODE, (payload) => {
+      handlers.onMaintenance?.(payload);
     });
   }
 

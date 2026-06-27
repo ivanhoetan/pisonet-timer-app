@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { registerComputerSchema, heartbeatSchema, endComputerSessionSchema } from '@pisonet/shared';
+import {
+  registerComputerSchema,
+  heartbeatSchema,
+  endComputerSessionSchema,
+  maintenanceSchema,
+} from '@pisonet/shared';
 import { Computer } from '../models/Computer';
 import { generateAuthSecret } from '../utils/crypto';
 import { validateBody } from '../middleware/validate';
@@ -159,6 +164,37 @@ computersRouter.post(
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Failed to shut down computer' });
+    }
+  }
+);
+
+computersRouter.post(
+  '/:id/maintenance',
+  authMiddleware,
+  adminMiddleware,
+  validateBody(maintenanceSchema),
+  async (req, res) => {
+    try {
+      const computer = await Computer.findById(req.params.id);
+      if (!computer) {
+        res.status(404).json({ error: 'Computer not found' });
+        return;
+      }
+
+      const { enabled } = req.body as { enabled: boolean };
+      await sessionEngine.setMaintenance(computer._id.toString(), enabled);
+
+      recordAudit(req as AuthRequest, {
+        action: enabled ? 'computer_maintenance_on' : 'computer_maintenance_off',
+        targetType: 'computer',
+        targetId: computer._id.toString(),
+        targetLabel: computer.computerCode,
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to set maintenance mode' });
     }
   }
 );

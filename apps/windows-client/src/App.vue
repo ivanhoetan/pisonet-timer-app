@@ -6,7 +6,7 @@ import { pinLogin, pinLogout, endSession, endComputerSession } from './lib/api';
 import { socketClient } from './lib/socket';
 import { formatTime } from './lib/time';
 
-type Screen = 'loading' | 'pairing' | 'lock' | 'session' | 'expired';
+type Screen = 'loading' | 'pairing' | 'lock' | 'session' | 'expired' | 'maintenance';
 
 const screen = ref<Screen>('loading');
 const config = ref<PairingConfig | null>(null);
@@ -18,7 +18,18 @@ const pairForm = ref({
   computerId: '',
   authSecret: '',
   computerCode: '',
+  maintenanceCode: '',
 });
+
+// Maintenance mode: unrestricted PC access for updates/repairs (no paid session).
+const maintenancePromptOpen = ref(false);
+const maintenanceCodeInput = ref('');
+const maintenanceError = ref('');
+let removeMaintenancePrompt: (() => void) | undefined;
+
+// Sticky mini-timer: collapses the session window to a small always-on-top widget.
+const minimized = ref(false);
+let removeSessionMinimize: (() => void) | undefined;
 
 const loginForm = ref({ username: '', pin: '' });
 const lastCredentials = ref({ username: '', pin: '' });
@@ -63,14 +74,6 @@ function startIdleCountdown() {
   }, 1000);
 }
 
-// Any keyboard/mouse activity on the login screen resets the idle timer so a
-// customer actively typing credentials is never shut down mid-login.
-function resetIdleCountdown() {
-  if (idleTimer) {
-    idleSecondsLeft.value = IDLE_SHUTDOWN_SECONDS;
-  }
-}
-
 // The PC is "unlocked" only during an active paid session. Every other
 // screen (pairing, lock, expired, loading) keeps the kiosk lock engaged so
 // the customer cannot reach the Windows desktop without time credits.
@@ -78,6 +81,18 @@ function resetIdleCountdown() {
 watch(
   screen,
   (current) => {
+    // Leaving a session always collapses the sticky mini-timer back to normal.
+    if (current !== 'session' && minimized.value) {
+      minimized.value = false;
+      if (current !== 'maintenance') {
+        void window.pisonet?.exitMiniTimer?.();
+      }
+    }
+    if (current === 'maintenance') {
+      // Lock release + window restore handled by enterMaintenance(); no shutdown.
+      cancelIdleCountdown();
+      return;
+    }
     if (current === 'session') {
       window.pisonet?.releaseLock?.();
       cancelIdleCountdown();
@@ -198,6 +213,13 @@ function connectSocket() {
     onShutdown: () => {
       triggerShutdown();
     },
+    onMaintenance: (payload) => {
+      if (payload?.enabled) {
+        void enterMaintenanceMode();
+      } else if (screen.value === 'maintenance') {
+        void exitMaintenanceMode();
+      }
+    },
   });
 
   heartbeatTimer = setInterval(() => {
@@ -211,6 +233,7 @@ async function savePairing() {
     computerId: pairForm.value.computerId.trim(),
     authSecret: pairForm.value.authSecret.trim(),
     computerCode: pairForm.value.computerCode.trim() || undefined,
+    maintenanceCode: pairForm.value.maintenanceCode.trim() || undefined,
   };
 
   if (!nextConfig.serverUrl || !nextConfig.computerId || !nextConfig.authSecret) {
@@ -273,6 +296,17 @@ async function handleLogout() {
   enterLockScreen();
 }
 
+async function minimizeSession() {
+  if (screen.value !== 'session') return;
+  minimized.value = true;
+  await window.pisonet?.enterMiniTimer?.();
+}
+
+async function restoreFromMini() {
+  minimized.value = false;
+  await window.pisonet?.exitMiniTimer?.();
+}
+
 async function handleExpiredBackToLogin() {
   try {
     await endActiveSession();
@@ -282,6 +316,47 @@ async function handleExpiredBackToLogin() {
     clearTimers();
     enterLockScreen();
   }
+}
+
+function openMaintenancePrompt() {
+  if (screen.value === 'maintenance') return;
+  maintenanceCodeInput.value = '';
+  maintenanceError.value = '';
+  maintenancePromptOpen.value = true;
+}
+
+async function enterMaintenanceMode() {
+  clearTimers();
+  resetSession();
+  cancelIdleCountdown();
+  maintenancePromptOpen.value = false;
+  screen.value = 'maintenance';
+  await window.pisonet?.enterMaintenance?.();
+}
+
+async function submitMaintenanceCode() {
+  const expected = config.value?.maintenanceCode?.trim();
+  if (!expected) {
+    maintenanceError.value =
+      'No maintenance code set on this PC. Use the admin portal to unlock remotely.';
+    return;
+  }
+  if (maintenanceCodeInput.value.trim() !== expected) {
+    maintenanceError.value = 'Incorrect maintenance code.';
+    return;
+  }
+  await enterMaintenanceMode();
+}
+
+async function exitMaintenanceMode() {
+  await window.pisonet?.exitMaintenance?.();
+  enterLockScreen();
+}
+
+// Only reachable from maintenance mode (which already required the code), so the
+// app can never be quit from the locked/session screens that customers see.
+async function quitApplication() {
+  await window.pisonet?.quitApp?.();
 }
 
 onMounted(async () => {
@@ -297,6 +372,7 @@ onMounted(async () => {
     computerId: saved.computerId,
     authSecret: saved.authSecret,
     computerCode: saved.computerCode || '',
+    maintenanceCode: saved.maintenanceCode || '',
   };
   enterLockScreen();
   connectSocket();
@@ -305,27 +381,32 @@ onMounted(async () => {
     void handleLogout();
   });
 
-  window.addEventListener('keydown', resetIdleCountdown);
-  window.addEventListener('mousedown', resetIdleCountdown);
-  window.addEventListener('mousemove', resetIdleCountdown);
-  window.addEventListener('touchstart', resetIdleCountdown);
+  removeMaintenancePrompt = window.pisonet?.onMaintenancePrompt(() => {
+    openMaintenancePrompt();
+  });
+
+  // Alt+F4 / window-close during a session collapses to the sticky mini-timer.
+  removeSessionMinimize = window.pisonet?.onSessionMinimize(() => {
+    if (screen.value === 'session') minimized.value = true;
+  });
 });
 
 onUnmounted(() => {
   removeTrayLogout?.();
+  removeMaintenancePrompt?.();
+  removeSessionMinimize?.();
   clearTimers();
   cancelIdleCountdown();
   socketClient.disconnect();
-  window.removeEventListener('keydown', resetIdleCountdown);
-  window.removeEventListener('mousedown', resetIdleCountdown);
-  window.removeEventListener('mousemove', resetIdleCountdown);
-  window.removeEventListener('touchstart', resetIdleCountdown);
 });
 </script>
 
 <template>
   <div class="center-screen">
-    <div v-if="connecting && screen !== 'pairing'" class="overlay">
+    <div
+      v-if="connecting && screen !== 'pairing' && screen !== 'maintenance' && !minimized"
+      class="overlay"
+    >
       <div class="card">
         <h2>Connecting to server…</h2>
         <p class="muted">Waiting for connection. Timers resume automatically when connected.</p>
@@ -356,6 +437,11 @@ onUnmounted(() => {
         <input v-model="pairForm.computerCode" placeholder="PC01" />
       </label>
 
+      <label class="field">
+        <span>Maintenance code (unlocks PC for repairs)</span>
+        <input v-model="pairForm.maintenanceCode" placeholder="e.g. a staff-only secret" />
+      </label>
+
       <button class="primary" @click="savePairing">Save & connect</button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
     </div>
@@ -383,12 +469,28 @@ onUnmounted(() => {
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
 
+    <!-- Sticky mini-timer: small always-on-top widget while the customer uses the PC -->
+    <div
+      v-if="screen === 'session' && minimized"
+      class="mini-timer"
+      title="Click to open"
+      @click="restoreFromMini"
+    >
+      <span class="mini-time">{{ displayTime }}</span>
+      <span class="mini-expand">⤢</span>
+    </div>
+
     <div v-else-if="screen === 'session'" class="card session-card">
       <p class="muted">Logged in as {{ username }}</p>
       <div class="timer-display">{{ displayTime }}</div>
       <p class="muted">Time remaining</p>
-      <p class="muted tray-hint">Close button minimizes to system tray. Session keeps running.</p>
-      <button class="danger" @click="handleLogout">Logout & save time</button>
+      <p class="muted tray-hint">
+        Minimize to keep using the PC — a small timer stays on top of your screen.
+      </p>
+      <div class="session-actions">
+        <button class="secondary" @click="minimizeSession">Minimize</button>
+        <button class="danger" @click="handleLogout">Logout & save time</button>
+      </div>
     </div>
 
     <div v-else-if="screen === 'expired'" class="card">
@@ -396,6 +498,41 @@ onUnmounted(() => {
       <p class="muted">Your session has ended. Please add more time to continue.</p>
       <button class="primary" @click="handleExpiredBackToLogin">Back to login</button>
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
+    </div>
+
+    <div v-else-if="screen === 'maintenance'" class="card session-card">
+      <h1>Maintenance mode</h1>
+      <p class="muted">
+        {{ config?.computerCode || 'This PC' }} is unlocked for servicing. The keyboard and desktop
+        are fully accessible. Auto-shutdown is paused.
+      </p>
+      <p class="muted tray-hint">Lock the PC again when you're done.</p>
+      <div class="session-actions">
+        <button class="secondary" @click="quitApplication">Quit application</button>
+        <button class="primary" @click="exitMaintenanceMode">Exit maintenance &amp; lock</button>
+      </div>
+    </div>
+
+    <!-- Maintenance unlock prompt (triggered by secret combo or tray) -->
+    <div v-if="maintenancePromptOpen" class="overlay">
+      <div class="card">
+        <h2>Maintenance access</h2>
+        <p class="muted">Enter the maintenance code to unlock this PC for repairs.</p>
+        <label class="field">
+          <span>Maintenance code</span>
+          <input
+            v-model="maintenanceCodeInput"
+            type="password"
+            autofocus
+            @keyup.enter="submitMaintenanceCode"
+          />
+        </label>
+        <p v-if="maintenanceError" class="error">{{ maintenanceError }}</p>
+        <div class="prompt-actions">
+          <button class="secondary" @click="maintenancePromptOpen = false">Cancel</button>
+          <button class="primary" @click="submitMaintenanceCode">Unlock</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -431,5 +568,56 @@ h1 {
   font-size: 13px;
   margin-top: 16px;
   color: #f59e0b;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.session-actions button {
+  flex: 1;
+  max-width: 220px;
+}
+
+/* Sticky mini-timer fills the tiny always-on-top widget window. */
+.mini-timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: #111827;
+  border: 1px solid #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mini-timer:hover {
+  border-color: #2563eb;
+}
+
+.mini-time {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-expand {
+  font-size: 18px;
+  color: #94a3b8;
 }
 </style>

@@ -76,7 +76,7 @@ export interface Computer {
   _id: string;
   computerCode: string;
   name: string;
-  status: 'ONLINE' | 'OFFLINE' | 'IN_USE' | 'LOCKED';
+  status: 'ONLINE' | 'OFFLINE' | 'IN_USE' | 'LOCKED' | 'MAINTENANCE';
   lastOnline?: string;
 }
 

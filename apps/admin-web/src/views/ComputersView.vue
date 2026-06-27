@@ -22,6 +22,7 @@ const statusClass: Record<Computer['status'], string> = {
   IN_USE: 'inuse',
   OFFLINE: 'offline',
   LOCKED: 'locked',
+  MAINTENANCE: 'maintenance',
 };
 
 async function load() {
@@ -83,6 +84,21 @@ async function shutdown(c: Computer) {
   }
 }
 
+async function toggleMaintenance(c: Computer) {
+  const turningOn = c.status !== 'MAINTENANCE';
+  const msg = turningOn
+    ? `Put ${c.computerCode} in maintenance mode? The PC unlocks for free access (any active session is logged out, time saved).`
+    : `End maintenance on ${c.computerCode}? The PC re-locks to the login screen.`;
+  if (!confirm(msg)) return;
+  try {
+    await api.post(`/computers/${c._id}/maintenance`, { enabled: turningOn });
+    showToast(turningOn ? `${c.computerCode} in maintenance` : `${c.computerCode} re-locked`);
+    await load();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Maintenance toggle failed');
+  }
+}
+
 function copy(text: string) {
   navigator.clipboard?.writeText(text).then(() => showToast('Copied'));
 }
@@ -133,6 +149,15 @@ onUnmounted(() => {
           @click="shutdown(c)"
         >
           Shut down
+        </button>
+      </div>
+      <div class="cc-actions">
+        <button
+          class="btn-ghost btn-sm"
+          :disabled="c.status === 'OFFLINE'"
+          @click="toggleMaintenance(c)"
+        >
+          {{ c.status === 'MAINTENANCE' ? 'End maintenance' : 'Maintenance' }}
         </button>
       </div>
     </div>

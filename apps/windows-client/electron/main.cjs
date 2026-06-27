@@ -6,6 +6,7 @@ const {
   nativeImage,
   powerSaveBlocker,
   globalShortcut,
+  screen,
   ipcMain,
 } = require('electron');
 const path = require('path');
@@ -19,8 +20,18 @@ let tray = null;
 let powerBlocker = null;
 let isQuitting = false;
 let lockdownActive = true;
+let maintenanceActive = false;
+let miniActive = false;
+let preMiniBounds = null;
 
 const isDev = !app.isPackaged;
+
+// Secret combo that opens the maintenance unlock prompt while the PC is locked.
+const MAINTENANCE_SHORTCUT = 'Control+Alt+Shift+M';
+
+// Sticky mini-timer widget dimensions (shown top-right during a session).
+const MINI_WIDTH = 188;
+const MINI_HEIGHT = 64;
 
 // Shortcuts to swallow while the PC is locked (no active paid session).
 const LOCK_SHORTCUTS = [
@@ -68,6 +79,29 @@ function unregisterLockShortcuts() {
   }
 }
 
+function promptMaintenance() {
+  if (!mainWindow || maintenanceActive) return;
+  bringToFront();
+  mainWindow.webContents.send('maintenance:prompt');
+}
+
+function registerMaintenanceShortcut() {
+  if (isDev) return;
+  try {
+    globalShortcut.register(MAINTENANCE_SHORTCUT, promptMaintenance);
+  } catch {
+    // ignore
+  }
+}
+
+function unregisterMaintenanceShortcut() {
+  try {
+    globalShortcut.unregister(MAINTENANCE_SHORTCUT);
+  } catch {
+    // ignore
+  }
+}
+
 function bringToFront() {
   if (!mainWindow) return;
   mainWindow.show();
@@ -77,6 +111,7 @@ function bringToFront() {
 
 function applyLock() {
   lockdownActive = true;
+  maintenanceActive = false;
   if (!mainWindow) return;
 
   mainWindow.setMinimizable(false);
@@ -87,6 +122,7 @@ function applyLock() {
   }
   bringToFront();
   registerLockShortcuts();
+  registerMaintenanceShortcut();
 }
 
 function releaseLock() {
@@ -94,11 +130,78 @@ function releaseLock() {
   if (!mainWindow) return;
 
   unregisterLockShortcuts();
+  unregisterMaintenanceShortcut();
   mainWindow.setMinimizable(true);
   if (!isDev) {
     mainWindow.setAlwaysOnTop(false);
     mainWindow.setKiosk(false);
   }
+}
+
+// Sticky mini-timer: shrink the window to a small always-on-top widget in the
+// top-right corner so the customer can use the PC while still seeing their time.
+function enterMiniTimer() {
+  if (!mainWindow || !mainWindow.isVisible()) {
+    if (mainWindow) mainWindow.show();
+  }
+  if (!mainWindow) return;
+
+  miniActive = true;
+  preMiniBounds = mainWindow.getBounds();
+
+  if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+  if (!isDev) mainWindow.setKiosk(false);
+  mainWindow.setResizable(false);
+  mainWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  const area = screen.getPrimaryDisplay().workArea;
+  mainWindow.setBounds({
+    x: area.x + area.width - MINI_WIDTH - 16,
+    y: area.y + 16,
+    width: MINI_WIDTH,
+    height: MINI_HEIGHT,
+  });
+}
+
+function exitMiniTimer() {
+  miniActive = false;
+  if (!mainWindow) return;
+
+  mainWindow.setResizable(true);
+  mainWindow.setAlwaysOnTop(false);
+  if (isDev) {
+    if (preMiniBounds) mainWindow.setBounds(preMiniBounds);
+  } else {
+    mainWindow.setFullScreen(true);
+  }
+  bringToFront();
+}
+
+// Maintenance mode: full, unrestricted access to the PC for updates/repairs.
+// Unlocks the keyboard and screen without starting a paid session.
+function enterMaintenance() {
+  maintenanceActive = true;
+  miniActive = false;
+  releaseLock();
+  if (!mainWindow) return;
+
+  // Restore a usable, movable window (could be coming from the mini timer).
+  mainWindow.setResizable(true);
+  if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+  const area = screen.getPrimaryDisplay().workArea;
+  const w = Math.min(900, area.width - 80);
+  const h = Math.min(600, area.height - 80);
+  mainWindow.setBounds({
+    x: area.x + Math.round((area.width - w) / 2),
+    y: area.y + Math.round((area.height - h) / 2),
+    width: w,
+    height: h,
+  });
+  bringToFront();
+}
+
+function exitMaintenance() {
+  applyLock();
 }
 
 function showMainWindow() {
@@ -150,10 +253,9 @@ function createTray() {
       label: 'Logout & save time',
       click: requestLogoutFromTray,
     },
-    { type: 'separator' },
     {
-      label: 'Quit application (admin)',
-      click: quitApp,
+      label: 'Maintenance mode (admin)',
+      click: promptMaintenance,
     },
   ]);
 
@@ -218,14 +320,21 @@ function createWindow() {
     }
   });
 
-  // Close: when locked, stay up; when in a session, hide to tray.
+  // Close (incl. Alt+F4):
+  //  - locked: stay up (no escape to desktop).
+  //  - active session: collapse to the sticky mini-timer instead of vanishing,
+  //    so the customer always sees their remaining time.
+  //  - maintenance: hide to tray (admin is servicing).
   mainWindow.on('close', (e) => {
     if (isQuitting) return;
     e.preventDefault();
     if (lockdownActive) {
       showMainWindow();
-    } else {
+    } else if (maintenanceActive) {
       mainWindow.hide();
+    } else {
+      enterMiniTimer();
+      mainWindow.webContents.send('session:minimize');
     }
   });
 
@@ -266,6 +375,26 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('system:shutdown', () => {
     shutdownPc();
+    return true;
+  });
+  ipcMain.handle('maintenance:enter', () => {
+    enterMaintenance();
+    return true;
+  });
+  ipcMain.handle('maintenance:exit', () => {
+    exitMaintenance();
+    return true;
+  });
+  ipcMain.handle('mini:enter', () => {
+    enterMiniTimer();
+    return true;
+  });
+  ipcMain.handle('mini:exit', () => {
+    exitMiniTimer();
+    return true;
+  });
+  ipcMain.handle('app:quit', () => {
+    quitApp();
     return true;
   });
 

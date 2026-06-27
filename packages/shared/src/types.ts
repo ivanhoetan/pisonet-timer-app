@@ -11,6 +11,7 @@ export const ComputerStatus = {
   OFFLINE: 'OFFLINE',
   IN_USE: 'IN_USE',
   LOCKED: 'LOCKED',
+  MAINTENANCE: 'MAINTENANCE',
 } as const;
 
 export type ComputerStatus = (typeof ComputerStatus)[keyof typeof ComputerStatus];
@@ -24,6 +25,7 @@ export const WsEvents = {
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   FORCE_LOCK: 'FORCE_LOCK',
   SHUTDOWN: 'SHUTDOWN',
+  MAINTENANCE_MODE: 'MAINTENANCE_MODE',
   HEARTBEAT: 'HEARTBEAT',
   COMPUTER_STATUS: 'COMPUTER_STATUS',
   SESSION_STATE: 'SESSION_STATE',
