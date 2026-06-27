@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { PairingConfig } from './env';
 import { loadConfig, saveConfig } from './lib/config';
-import { pinLogin, pinLogout, endSession, endComputerSession } from './lib/api';
+import { pinLogin, pinLogout, endSession, endComputerSession, warmUpServer } from './lib/api';
 import { socketClient } from './lib/socket';
 import { formatTime } from './lib/time';
 
@@ -249,6 +249,8 @@ async function savePairing() {
   config.value = nextConfig;
   loginError.value = '';
   enterLockScreen();
+  connecting.value = true;
+  await warmUpServer(nextConfig.serverUrl);
   connectSocket();
 }
 
@@ -379,6 +381,8 @@ onMounted(async () => {
     maintenanceCode: saved.maintenanceCode || '',
   };
   enterLockScreen();
+  connecting.value = true;
+  await warmUpServer(saved.serverUrl);
   connectSocket();
 
   removeTrayLogout = window.pisonet?.onTrayLogout(() => {
@@ -413,7 +417,10 @@ onUnmounted(() => {
     >
       <div class="card">
         <h2>Connecting to server…</h2>
-        <p class="muted">Waiting for connection. Timers resume automatically when connected.</p>
+        <p class="muted">
+          Waking cloud server if needed (may take up to a minute after hours). Timers resume when
+          connected.
+        </p>
       </div>
     </div>
 
@@ -473,10 +480,16 @@ onUnmounted(() => {
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
 
-    <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC -->
+    <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC.
+         Fixed to fill the whole tiny window so the frameless content never shows scrollbars. -->
     <div v-if="screen === 'session' && minimized" class="mini-timer" title="Drag to move">
       <span class="mini-time">{{ displayTime }}</span>
-      <button class="mini-expand" title="Open timer" @click="restoreFromMini">⤢</button>
+      <div class="mini-buttons">
+        <button class="mini-btn" title="Maximize" @click="restoreFromMini">⤢</button>
+        <button class="mini-btn mini-logout" title="Logout &amp; save time" @click="handleLogout">
+          ⏻
+        </button>
+      </div>
     </div>
 
     <div v-else-if="screen === 'session'" class="card session-card">
@@ -587,55 +600,69 @@ h1 {
   max-width: 220px;
 }
 
-/* Sticky mini-timer fills the tiny always-on-top widget window. The whole bar
-   is a drag region so the customer can reposition it anywhere on screen. */
+/* Sticky mini-timer fills the entire tiny always-on-top window. Fixed + inset:0
+   so it never relies on the centered layout (which caused scrollbars). The bar
+   itself is a drag region so the customer can move it anywhere on screen. */
 .mini-timer {
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  height: 100%;
-  padding: 0 12px 0 16px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 0 8px 0 14px;
+  overflow: hidden;
   background: #111827;
   border: 1px solid #334155;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
   user-select: none;
   cursor: move;
   -webkit-app-region: drag;
 }
 
-.mini-timer:hover {
-  border-color: #2563eb;
-}
-
 .mini-time {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* Expand button must opt out of the drag region so clicks register. */
-.mini-expand {
+.mini-buttons {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Buttons must opt out of the drag region so their clicks register. */
+.mini-btn {
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   font-size: 18px;
   line-height: 1;
-  color: #94a3b8;
+  color: #e2e8f0;
   background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 8px;
   cursor: pointer;
 }
 
-.mini-expand:hover {
-  color: #f8fafc;
+.mini-btn:hover {
   background: #334155;
+}
+
+.mini-logout {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
+.mini-logout:hover {
+  background: #dc2626;
+  color: #fff;
 }
 </style>

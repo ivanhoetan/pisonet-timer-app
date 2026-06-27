@@ -1,5 +1,26 @@
 import { normalizeServerUrl } from './config';
 
+/** Max wait while Render (or similar) cold-starts after sleep (~30–60s). */
+const WARMUP_TIMEOUT_MS = 90_000;
+
+/**
+ * Hit /health so a sleeping cloud backend wakes before login or WebSocket connect.
+ * Failures are ignored; the socket client keeps retrying.
+ */
+export async function warmUpServer(serverUrl: string): Promise<void> {
+  const base = normalizeServerUrl(serverUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS);
+
+  try {
+    await fetch(`${base}/health`, { signal: controller.signal });
+  } catch {
+    // Cold start may still be in progress, or the network is down.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function apiRequest<T>(
   serverUrl: string,
   path: string,

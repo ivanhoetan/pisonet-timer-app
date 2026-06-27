@@ -29,9 +29,10 @@ const isDev = !app.isPackaged;
 // Secret combo that opens the maintenance unlock prompt while the PC is locked.
 const MAINTENANCE_SHORTCUT = 'Control+Alt+Shift+M';
 
-// Sticky mini-timer widget dimensions (shown top-right during a session).
-const MINI_WIDTH = 188;
-const MINI_HEIGHT = 64;
+// Sticky mini-timer widget dimensions (shown top-right during a session):
+// time readout + maximize + logout buttons in one compact bar.
+const MINI_WIDTH = 210;
+const MINI_HEIGHT = 56;
 
 // Shortcuts to swallow while the PC is locked (no active paid session).
 const LOCK_SHORTCUTS = [
@@ -252,10 +253,6 @@ function createTray() {
     {
       label: 'Logout & save time',
       click: requestLogoutFromTray,
-    },
-    {
-      label: 'Maintenance mode (admin)',
-      click: promptMaintenance,
     },
   ]);
 

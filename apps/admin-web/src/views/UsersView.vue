@@ -22,7 +22,7 @@ const form = ref({
   mobileNumber: '',
   status: 'active' as 'active' | 'disabled',
   initialMinutes: 0,
-  topupPesos: 20,
+  topupPesos: 1,
   minutesRemoved: 10,
   adjustReason: '',
   paymentMethod: 'manual',
@@ -56,7 +56,7 @@ function openCreate() {
     mobileNumber: '',
     status: 'active',
     initialMinutes: 0,
-    topupPesos: 20,
+    topupPesos: 1,
     minutesRemoved: 10,
     adjustReason: '',
     paymentMethod: 'manual',
@@ -75,7 +75,7 @@ function openEdit(u: AdminUser) {
     mobileNumber: u.mobileNumber || '',
     status: u.status,
     initialMinutes: 0,
-    topupPesos: 20,
+    topupPesos: 1,
     minutesRemoved: 10,
     adjustReason: '',
     paymentMethod: 'manual',
@@ -88,7 +88,7 @@ function openEdit(u: AdminUser) {
 function openTopup(u: AdminUser) {
   editingId.value = u.id;
   form.value.username = u.username;
-  form.value.topupPesos = 20;
+  form.value.topupPesos = 1;
   form.value.paymentMethod = 'manual';
   form.value.paymentReference = '';
   formError.value = '';
@@ -311,10 +311,11 @@ onMounted(load);
           <input v-model.number="form.topupPesos" type="number" min="1" />
         </label>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+          <button class="btn-ghost btn-sm" @click="form.topupPesos = 1">₱1</button>
+          <button class="btn-ghost btn-sm" @click="form.topupPesos = 5">₱5</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 10">₱10</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 20">₱20</button>
           <button class="btn-ghost btn-sm" @click="form.topupPesos = 50">₱50</button>
-          <button class="btn-ghost btn-sm" @click="form.topupPesos = 100">₱100</button>
         </div>
         <p class="muted" style="margin: 0 0 14px">
           = <strong>{{ pesosToMinutes(Number(form.topupPesos) || 0) }} minutes</strong>

@@ -10,7 +10,7 @@ const toast = ref('');
 
 // Top-up modal state
 const topupFor = ref<LiveSession | null>(null);
-const topupPesos = ref(20);
+const topupPesos = ref(1);
 const topupSaving = ref(false);
 const topupError = ref('');
 
@@ -59,7 +59,7 @@ async function lockComputer(s: LiveSession) {
 
 function openTopup(s: LiveSession) {
   topupFor.value = s;
-  topupPesos.value = 20;
+  topupPesos.value = 1;
   topupError.value = '';
 }
 
@@ -225,10 +225,11 @@ onUnmounted(() => {
         <input v-model.number="topupPesos" type="number" min="1" />
       </label>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+        <button class="btn-ghost btn-sm" @click="topupPesos = 1">₱1</button>
+        <button class="btn-ghost btn-sm" @click="topupPesos = 5">₱5</button>
         <button class="btn-ghost btn-sm" @click="topupPesos = 10">₱10</button>
         <button class="btn-ghost btn-sm" @click="topupPesos = 20">₱20</button>
         <button class="btn-ghost btn-sm" @click="topupPesos = 50">₱50</button>
-        <button class="btn-ghost btn-sm" @click="topupPesos = 100">₱100</button>
       </div>
       <p class="muted" style="margin: 0 0 14px">
         = <strong>{{ pesosToMinutes(Number(topupPesos) || 0) }} minutes</strong>
