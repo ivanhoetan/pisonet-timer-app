@@ -184,14 +184,15 @@ async function toggleStatus(u: AdminUser) {
 async function redeemReward(u: AdminUser) {
   const available = rewardsAvailable(u.loyaltyStamps);
   if (available <= 0) return;
+  // Redeem one free hour at a time, even if the customer has stacked several.
+  const remainingAfter = available - 1;
   const msg =
-    available === 1
-      ? `Redeem ${STAMPS_PER_REWARD} stamps for 1 free hour for ${u.username}?`
-      : `Redeem all ${available} free hours (${available * STAMPS_PER_REWARD} stamps) for ${u.username}?`;
+    `Redeem ${STAMPS_PER_REWARD} stamps for 1 free hour for ${u.username}?` +
+    (remainingAfter > 0 ? ` (${remainingAfter} more free hour(s) will remain.)` : '');
   if (!confirm(msg)) return;
   try {
-    await api.post('/loyalty/redeem', { userId: u.id });
-    showToast(`Redeemed ${available} free hour(s) for ${u.username}`);
+    await api.post('/loyalty/redeem', { userId: u.id, rewards: 1 });
+    showToast(`Redeemed 1 free hour for ${u.username}`);
     await load();
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : 'Redeem failed');
