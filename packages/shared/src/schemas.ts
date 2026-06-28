@@ -41,6 +41,11 @@ export const registerComputerSchema = z.object({
   name: z.string().min(1).max(64),
 });
 
+// Quick-pair: the client redeems a short, single-use code for its credentials.
+export const claimComputerSchema = z.object({
+  code: z.string().min(4).max(16),
+});
+
 export const heartbeatSchema = z.object({
   computerId: z.string().min(1),
 });
@@ -121,3 +126,4 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type PinLoginInput = z.infer<typeof pinLoginSchema>;
 export type PasswordLoginInput = z.infer<typeof passwordLoginSchema>;
+export type ClaimComputerInput = z.infer<typeof claimComputerSchema>;

@@ -16,6 +16,7 @@ const ACTION_LABELS: Record<string, string> = {
   user_update: 'User updated',
   admin_create: 'Admin created',
   computer_register: 'PC registered',
+  computer_pairing_code: 'PC pairing code generated',
   computer_lock: 'PC locked',
   computer_shutdown: 'PC shut down',
   computer_maintenance_on: 'Maintenance on',

@@ -9,6 +9,7 @@ import {
   warmUpServer,
   registerUser,
   changePassword,
+  claimComputer,
 } from './lib/api';
 import { socketClient } from './lib/socket';
 import { formatTime } from './lib/time';
@@ -20,13 +21,19 @@ const config = ref<PairingConfig | null>(null);
 const connected = ref(false);
 const connecting = ref(false);
 
+const DEFAULT_SERVER_URL = 'https://pisonet-timer-api.onrender.com';
+
 const pairForm = ref({
-  serverUrl: 'http://localhost:3000',
+  serverUrl: DEFAULT_SERVER_URL,
+  pairingCode: '',
   computerId: '',
   authSecret: '',
   computerCode: '',
   maintenanceCode: '',
 });
+// 'code' = quick pair with a short code; 'manual' = paste ID + auth secret.
+const pairMode = ref<'code' | 'manual'>('code');
+const pairing = ref(false);
 
 // Maintenance mode: unrestricted PC access for updates/repairs (no paid session).
 const maintenancePromptOpen = ref(false);
@@ -265,18 +272,49 @@ function connectSocket() {
 }
 
 async function savePairing() {
-  const nextConfig: PairingConfig = {
-    serverUrl: pairForm.value.serverUrl.trim(),
-    computerId: pairForm.value.computerId.trim(),
-    authSecret: pairForm.value.authSecret.trim(),
-    computerCode: pairForm.value.computerCode.trim() || undefined,
-    maintenanceCode: pairForm.value.maintenanceCode.trim() || undefined,
-  };
-
-  if (!nextConfig.serverUrl || !nextConfig.computerId || !nextConfig.authSecret) {
-    loginError.value = 'Fill in server URL, computer ID, and auth secret.';
+  const serverUrl = pairForm.value.serverUrl.trim();
+  if (!serverUrl) {
+    loginError.value = 'Enter the server URL.';
     return;
   }
+
+  let computerId = pairForm.value.computerId.trim();
+  let authSecret = pairForm.value.authSecret.trim();
+  let computerCode = pairForm.value.computerCode.trim() || undefined;
+
+  if (pairMode.value === 'code') {
+    const code = pairForm.value.pairingCode.trim();
+    if (!code) {
+      loginError.value = 'Enter the pairing code from the admin portal.';
+      return;
+    }
+    loginError.value = '';
+    pairing.value = true;
+    try {
+      await warmUpServer(serverUrl);
+      const claimed = await claimComputer(serverUrl, code);
+      computerId = claimed.computerId;
+      authSecret = claimed.authSecret;
+      computerCode = claimed.computerCode || computerCode;
+    } catch (err) {
+      loginError.value =
+        err instanceof Error ? err.message : 'Could not pair with that code. Check it and retry.';
+      return;
+    } finally {
+      pairing.value = false;
+    }
+  } else if (!computerId || !authSecret) {
+    loginError.value = 'Fill in computer ID and auth secret (or switch to Quick pair).';
+    return;
+  }
+
+  const nextConfig: PairingConfig = {
+    serverUrl,
+    computerId,
+    authSecret,
+    computerCode,
+    maintenanceCode: pairForm.value.maintenanceCode.trim() || undefined,
+  };
 
   await saveConfig(nextConfig);
   config.value = nextConfig;
@@ -499,6 +537,7 @@ onMounted(async () => {
   config.value = saved;
   pairForm.value = {
     serverUrl: saved.serverUrl,
+    pairingCode: '',
     computerId: saved.computerId,
     authSecret: saved.authSecret,
     computerCode: saved.computerCode || '',
@@ -550,34 +589,56 @@ onUnmounted(() => {
 
     <div v-if="screen === 'pairing'" class="card">
       <h1>Pair this PC</h1>
-      <p class="muted">Enter the server URL and credentials from the admin setup.</p>
+      <p class="muted">Register this PC in the admin portal, then enter the pairing code here.</p>
+
+      <div class="pair-tabs">
+        <button :class="{ active: pairMode === 'code' }" @click="pairMode = 'code'">Quick pair</button>
+        <button :class="{ active: pairMode === 'manual' }" @click="pairMode = 'manual'">Manual</button>
+      </div>
 
       <label class="field">
         <span>Server URL</span>
         <input v-model="pairForm.serverUrl" placeholder="https://your-app.onrender.com" />
       </label>
 
-      <label class="field">
-        <span>Computer ID</span>
-        <input v-model="pairForm.computerId" placeholder="MongoDB computer _id" />
-      </label>
+      <template v-if="pairMode === 'code'">
+        <label class="field">
+          <span>Pairing code (from admin portal → Computers)</span>
+          <input
+            v-model="pairForm.pairingCode"
+            class="pair-code-input"
+            placeholder="7K2-Q9F"
+            autocapitalize="characters"
+            @keyup.enter="savePairing"
+          />
+        </label>
+      </template>
 
-      <label class="field">
-        <span>Auth secret</span>
-        <input v-model="pairForm.authSecret" placeholder="Pairing token" />
-      </label>
+      <template v-else>
+        <label class="field">
+          <span>Computer ID</span>
+          <input v-model="pairForm.computerId" placeholder="MongoDB computer _id" />
+        </label>
 
-      <label class="field">
-        <span>Computer code (optional label)</span>
-        <input v-model="pairForm.computerCode" placeholder="PC01" />
-      </label>
+        <label class="field">
+          <span>Auth secret</span>
+          <input v-model="pairForm.authSecret" placeholder="Pairing token" />
+        </label>
+
+        <label class="field">
+          <span>Computer code (optional label)</span>
+          <input v-model="pairForm.computerCode" placeholder="PC01" />
+        </label>
+      </template>
 
       <label class="field">
         <span>Maintenance code (unlocks PC for repairs)</span>
         <input v-model="pairForm.maintenanceCode" placeholder="e.g. a staff-only secret" />
       </label>
 
-      <button class="primary" @click="savePairing">Save & connect</button>
+      <button class="primary" :disabled="pairing" @click="savePairing">
+        {{ pairing ? 'Pairing…' : 'Save & connect' }}
+      </button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
     </div>
 
@@ -832,6 +893,38 @@ h1 {
 .card > .secondary {
   width: 100%;
   margin-top: 10px;
+}
+
+.pair-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.pair-tabs button {
+  flex: 1;
+  background: transparent;
+  color: #94a3b8;
+  padding: 9px;
+  border-radius: 7px;
+  font-size: 14px;
+  margin: 0;
+}
+
+.pair-tabs button.active {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.pair-code-input {
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  text-align: center;
 }
 
 .lock-divider {

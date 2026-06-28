@@ -13,8 +13,20 @@ const saving = ref(false);
 const formError = ref('');
 const regForm = ref({ computerCode: '', name: '' });
 
-// Credentials shown once after registering a computer (needed to pair the client).
-const newCredentials = ref<{ id: string; computerCode: string; authSecret: string } | null>(null);
+// Pairing details shown after registering or re-pairing a computer.
+// authSecret is only present right after a fresh registration (manual fallback).
+const newCredentials = ref<{
+  id: string;
+  computerCode: string;
+  authSecret?: string;
+  pairingCode: string;
+  pairingCodeExpires: string;
+} | null>(null);
+
+function pairingExpiryLabel(iso: string): string {
+  const mins = Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 60000));
+  return mins > 0 ? `Expires in ~${mins} min` : 'Expired — generate a new code';
+}
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -48,10 +60,16 @@ async function register() {
   saving.value = true;
   formError.value = '';
   try {
-    const res = await api.post<{ id: string; computerCode: string; authSecret: string }>(
-      '/computers/register',
-      { computerCode: regForm.value.computerCode.trim().toUpperCase(), name: regForm.value.name.trim() }
-    );
+    const res = await api.post<{
+      id: string;
+      computerCode: string;
+      authSecret: string;
+      pairingCode: string;
+      pairingCodeExpires: string;
+    }>('/computers/register', {
+      computerCode: regForm.value.computerCode.trim().toUpperCase(),
+      name: regForm.value.name.trim(),
+    });
     newCredentials.value = res;
     showRegister.value = false;
     regForm.value = { computerCode: '', name: '' };
@@ -60,6 +78,20 @@ async function register() {
     formError.value = err instanceof ApiError ? err.message : 'Failed to register';
   } finally {
     saving.value = false;
+  }
+}
+
+async function repair(c: Computer) {
+  try {
+    const res = await api.post<{
+      id: string;
+      computerCode: string;
+      pairingCode: string;
+      pairingCodeExpires: string;
+    }>(`/computers/${c._id}/pairing-code`);
+    newCredentials.value = res;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Failed to generate code');
   }
 }
 
@@ -137,6 +169,9 @@ onUnmounted(() => {
       </div>
       <span class="muted">{{ c.name }}</span>
       <div class="cc-actions">
+        <button class="btn-ghost btn-sm" @click="repair(c)">
+          <Icon name="link" :size="14" />Pair
+        </button>
         <button
           class="btn-danger btn-sm"
           :disabled="c.status === 'OFFLINE'"
@@ -184,31 +219,43 @@ onUnmounted(() => {
     </div>
   </div>
 
-  <!-- Credentials modal (shown once) -->
+  <!-- Pairing details modal -->
   <div v-if="newCredentials" class="modal-backdrop" @click.self="newCredentials = null">
     <div class="card modal">
-      <h3>Pairing details for {{ newCredentials.computerCode }}</h3>
+      <h3>Pair {{ newCredentials.computerCode }}</h3>
       <p class="muted" style="margin-top: -8px">
-        Enter these in the Windows client's pairing screen. The auth secret is shown only once.
+        On the PC's pairing screen, choose <strong>Quick pair</strong> and enter this code.
       </p>
-      <label class="field">
-        <span>Computer ID</span>
-        <input :value="newCredentials.id" readonly @focus="($event.target as HTMLInputElement).select()" />
-      </label>
-      <button class="btn-ghost btn-sm" style="margin-bottom: 14px" @click="copy(newCredentials.id)">
-        <Icon name="copy" :size="14" />Copy ID
+
+      <div class="pair-code">{{ newCredentials.pairingCode }}</div>
+      <p class="muted pair-expiry">{{ pairingExpiryLabel(newCredentials.pairingCodeExpires) }}</p>
+      <button class="btn-primary" style="width: 100%; margin-bottom: 16px" @click="copy(newCredentials.pairingCode)">
+        <Icon name="copy" :size="14" />Copy code
       </button>
-      <label class="field">
-        <span>Auth secret</span>
-        <input :value="newCredentials.authSecret" readonly @focus="($event.target as HTMLInputElement).select()" />
-      </label>
-      <button
-        class="btn-ghost btn-sm"
-        style="margin-bottom: 14px"
-        @click="copy(newCredentials.authSecret)"
-      >
-        <Icon name="copy" :size="14" />Copy secret
-      </button>
+
+      <details class="pair-advanced">
+        <summary>Advanced: manual credentials</summary>
+        <label class="field" style="margin-top: 12px">
+          <span>Computer ID</span>
+          <input :value="newCredentials.id" readonly @focus="($event.target as HTMLInputElement).select()" />
+        </label>
+        <button class="btn-ghost btn-sm" style="margin-bottom: 14px" @click="copy(newCredentials.id)">
+          <Icon name="copy" :size="14" />Copy ID
+        </button>
+        <template v-if="newCredentials.authSecret">
+          <label class="field">
+            <span>Auth secret (shown only on first registration)</span>
+            <input :value="newCredentials.authSecret" readonly @focus="($event.target as HTMLInputElement).select()" />
+          </label>
+          <button class="btn-ghost btn-sm" @click="copy(newCredentials.authSecret!)">
+            <Icon name="copy" :size="14" />Copy secret
+          </button>
+        </template>
+        <p v-else class="muted">
+          Use the pairing code above — the auth secret is only revealed at first registration.
+        </p>
+      </details>
+
       <div class="modal-actions">
         <button class="btn-primary" @click="newCredentials = null"><Icon name="check" />Done</button>
       </div>
@@ -217,3 +264,36 @@ onUnmounted(() => {
 
   <div v-if="toast" class="toast">{{ toast }}</div>
 </template>
+
+<style scoped>
+.pair-code {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #0f172a;
+  color: #38bdf8;
+  border-radius: 12px;
+  padding: 18px 10px;
+  margin: 8px 0 6px;
+  user-select: all;
+}
+
+.pair-expiry {
+  text-align: center;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.pair-advanced {
+  margin-bottom: 8px;
+}
+
+.pair-advanced summary {
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 6px 0;
+}
+</style>

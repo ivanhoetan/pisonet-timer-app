@@ -32,38 +32,38 @@ You can do this from your phone or any browser.
    - **Display name** — a human label, e.g. `Corner unit by window`
 5. Tap **Register**.
 
-A **Pairing details** popup appears with:
+A **Pair** popup appears showing a short **pairing code** like `7K2-Q9F`.
 
-| Field | Use |
-|-------|-----|
-| **Computer ID** | Long MongoDB id — paste into the client |
-| **Auth secret** | One-time secret — paste into the client |
+> ⏱️ The pairing code is valid for **15 minutes** and can be used **once**. If it
+> expires, tap **Pair** on that PC's card to generate a fresh one — no need to
+> delete and re-register.
 
-> ⚠️ **Important:** the **Auth secret is shown only once.** Copy both values now
-> (use the **Copy ID** / **Copy secret** buttons). If you lose the secret, you
-> must delete and re-register the PC to get a new one.
-
-Tip: text/email the two values to yourself so you can paste them on the PC.
+Keep the popup open (or copy the code with **Copy code**) while you set up the PC.
 
 ---
 
 ## Part 2 — Pair the Windows client (on the PC)
 
 On the new PC, launch the **Pisonet Timer** app. On first run it shows the
-**Pair this PC** screen. Enter:
+**Pair this PC** screen with **Quick pair** selected. Enter:
 
 | Field | Value |
 |-------|-------|
-| **Server URL** | `https://pisonet-timer-api.onrender.com` |
-| **Computer ID** | Paste the Computer ID from Part 1 |
-| **Auth secret** | Paste the Auth secret from Part 1 |
-| **Computer code (optional label)** | e.g. `PC02` (for display only) |
+| **Server URL** | `https://pisonet-timer-api.onrender.com` (already pre-filled) |
+| **Pairing code** | The `XXX-XXX` code from Part 1 (hyphen optional) |
 | **Maintenance code** | Your staff-only secret (e.g. a word + numbers) |
 
 Then tap **Save & connect**.
 
-The app connects, wakes the server if needed, and lands on the **login screen**.
-The PC is now ready for customers.
+The app fetches its credentials automatically, connects, wakes the server if
+needed, and lands on the **login screen**. The PC is now ready for customers.
+
+> **Lost the code or it expired?** In the admin portal → **Computers**, tap
+> **Pair** on that PC's card for a new code.
+>
+> **No internet on the portal device?** Use the **Manual** tab on the pairing
+> screen and paste the Computer ID + Auth secret instead (Advanced section of the
+> Pair popup).
 
 ---
 
@@ -112,6 +112,7 @@ On the PC itself, staff can enter maintenance offline with the key combo
 |--------|-----|
 | PC stays **OFFLINE** in portal | Check the PC's internet; confirm Server URL is exactly `https://pisonet-timer-api.onrender.com` (no trailing slash needed) |
 | "Computer code already exists" | That code is taken — use a new one (e.g. `PC02B`) |
-| Lost the Auth secret | Delete the PC entry and re-register to generate a new secret |
+| Lost the Auth secret | Tap **Pair** on the PC's card for a fresh pairing code, then re-pair the client (no need to delete the PC) |
+| "Invalid or expired pairing code" | Codes last 15 min and are single-use — tap **Pair** for a new one |
 | First connection is slow | The free server may be waking from sleep (~30–60s); it connects automatically |
 | Wrong credentials entered | Re-open the app; if it's stuck on a screen, use `Ctrl+Alt+Shift+M` + maintenance code to access the desktop, then relaunch |

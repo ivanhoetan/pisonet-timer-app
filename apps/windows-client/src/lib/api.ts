@@ -44,6 +44,24 @@ export async function apiRequest<T>(
   return data as T;
 }
 
+export interface ClaimComputerResponse {
+  computerId: string;
+  authSecret: string;
+  computerCode: string;
+  name: string;
+}
+
+// Quick-pair: redeem a short code from the admin portal for this PC's credentials.
+export async function claimComputer(
+  serverUrl: string,
+  code: string
+): Promise<ClaimComputerResponse> {
+  return apiRequest<ClaimComputerResponse>(serverUrl, '/computers/claim', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
 export interface SessionLoginResponse {
   token: string;
   sessionId: string;
