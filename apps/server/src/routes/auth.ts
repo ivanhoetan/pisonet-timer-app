@@ -4,8 +4,10 @@ import {
   registerSchema,
   loginSchema,
   pinLoginSchema,
+  passwordLoginSchema,
   pinLogoutSchema,
   adminLoginSchema,
+  changePasswordSchema,
 } from '@pisonet/shared';
 import { User } from '../models/User';
 import { Admin } from '../models/Admin';
@@ -14,7 +16,7 @@ import { hashSecret, compareSecret } from '../utils/crypto';
 import { signToken } from '../utils/jwt';
 import { validateBody } from '../middleware/validate';
 import { sessionEngine } from '../services/sessionEngine';
-import type { AuthRequest } from '../middleware/auth';
+import { authMiddleware, userMiddleware, type AuthRequest } from '../middleware/auth';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -37,7 +39,7 @@ authRouter.post('/register', validateBody(registerSchema), async (req, res) => {
     const user = await User.create({
       username,
       passwordHash: await hashSecret(password),
-      pinHash: await hashSecret(pin),
+      pinHash: pin ? await hashSecret(pin) : undefined,
       mobileNumber,
       balanceSeconds: 0,
     });
@@ -95,7 +97,7 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
     const { username, pin, computerId } = req.body;
 
     const user = await User.findOne({ username });
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || !user.pinHash) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
@@ -141,12 +143,69 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
   }
 });
 
+// Password-based session login for the kiosk. Stronger than the 4–6 digit PIN.
+authRouter.post(
+  '/password-login',
+  loginLimiter,
+  validateBody(passwordLoginSchema),
+  async (req, res) => {
+    try {
+      const { username, password, computerId } = req.body;
+
+      const user = await User.findOne({ username });
+      if (!user || user.status !== 'active') {
+        res.status(401).json({ error: 'Invalid credentials' });
+        return;
+      }
+
+      const validPassword = await compareSecret(password, user.passwordHash);
+      if (!validPassword) {
+        res.status(401).json({ error: 'Invalid credentials' });
+        return;
+      }
+
+      const computer = await Computer.findById(computerId);
+      if (!computer) {
+        res.status(404).json({ error: 'Computer not found' });
+        return;
+      }
+
+      if (user.balanceSeconds <= 0) {
+        res.status(402).json({ error: 'Insufficient balance' });
+        return;
+      }
+
+      const { session, remainingSeconds } = await sessionEngine.startSession({
+        userId: user._id.toString(),
+        username: user.username,
+        computerId,
+        balanceSeconds: user.balanceSeconds,
+        loyaltyStamps: user.loyaltyStamps,
+      });
+
+      const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
+
+      res.json({
+        token,
+        sessionId: session._id,
+        remainingSeconds,
+        username: user.username,
+        loyaltyStamps: user.loyaltyStamps,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      const status = message.includes('already') || message.includes('in use') ? 409 : 400;
+      res.status(status).json({ error: message });
+    }
+  }
+);
+
 authRouter.post('/pin-logout', loginLimiter, validateBody(pinLogoutSchema), async (req, res) => {
   try {
     const { username, pin, computerId } = req.body;
 
     const user = await User.findOne({ username });
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || !user.pinHash) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
@@ -169,6 +228,38 @@ authRouter.post('/pin-logout', loginLimiter, validateBody(pinLogoutSchema), asyn
     res.status(400).json({ error: message });
   }
 });
+
+authRouter.post(
+  '/change-password',
+  authMiddleware,
+  userMiddleware,
+  validateBody(changePasswordSchema),
+  async (req: AuthRequest, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      const user = await User.findById(req.auth!.sub);
+      if (!user || user.status !== 'active') {
+        res.status(401).json({ error: 'Invalid credentials' });
+        return;
+      }
+
+      const valid = await compareSecret(currentPassword, user.passwordHash);
+      if (!valid) {
+        res.status(401).json({ error: 'Current password is incorrect' });
+        return;
+      }
+
+      user.passwordHash = await hashSecret(newPassword);
+      await user.save();
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to change password' });
+    }
+  }
+);
 
 authRouter.post('/admin/login', loginLimiter, validateBody(adminLoginSchema), async (req, res) => {
   try {

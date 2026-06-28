@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const registerSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
   password: z.string().min(6).max(128),
-  pin: z.string().regex(/^\d{4,6}$/),
+  pin: z.string().regex(/^\d{4,6}$/).optional(),
   mobileNumber: z.string().optional(),
 });
 
@@ -15,6 +15,12 @@ export const loginSchema = z.object({
 export const pinLoginSchema = z.object({
   username: z.string().min(1),
   pin: z.string().regex(/^\d{4,6}$/),
+  computerId: z.string().min(1),
+});
+
+export const passwordLoginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
   computerId: z.string().min(1),
 });
 
@@ -66,6 +72,11 @@ export const adjustTimeSchema = z.object({
   reason: z.string().max(200).optional(),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(128),
+});
+
 export const adminLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -89,7 +100,7 @@ export const maintenanceSchema = z.object({
 export const adminCreateUserSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
   password: z.string().min(6).max(128),
-  pin: z.string().regex(/^\d{4,6}$/),
+  pin: z.string().regex(/^\d{4,6}$/).optional(),
   mobileNumber: z.string().max(20).optional(),
   initialMinutes: z.number().int().min(0).optional(),
 });
@@ -109,3 +120,4 @@ export const adminUpdateUserSchema = z
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type PinLoginInput = z.infer<typeof pinLoginSchema>;
+export type PasswordLoginInput = z.infer<typeof passwordLoginSchema>;

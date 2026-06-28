@@ -118,8 +118,8 @@ async function submit() {
       const payload: Record<string, unknown> = {
         username: form.value.username.trim(),
         password: form.value.password,
-        pin: form.value.pin,
       };
+      if (form.value.pin.trim()) payload.pin = form.value.pin.trim();
       if (form.value.mobileNumber.trim()) payload.mobileNumber = form.value.mobileNumber.trim();
       if (form.value.initialMinutes > 0) payload.initialMinutes = Number(form.value.initialMinutes);
       await api.post('/users', payload);
@@ -344,7 +344,7 @@ onMounted(load);
           <input v-model="form.password" type="password" />
         </label>
         <label class="field">
-          <span>{{ mode === 'edit' ? 'New PIN (leave blank to keep)' : 'PIN (4–6 digits)' }}</span>
+          <span>{{ mode === 'edit' ? 'New PIN (leave blank to keep)' : 'PIN (4–6 digits, optional)' }}</span>
           <input v-model="form.pin" inputmode="numeric" maxlength="6" />
         </label>
         <label class="field">

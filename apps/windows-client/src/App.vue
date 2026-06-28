@@ -2,11 +2,18 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { PairingConfig } from './env';
 import { loadConfig, saveConfig } from './lib/config';
-import { pinLogin, pinLogout, endSession, endComputerSession, warmUpServer } from './lib/api';
+import {
+  passwordLogin,
+  endSession,
+  endComputerSession,
+  warmUpServer,
+  registerUser,
+  changePassword,
+} from './lib/api';
 import { socketClient } from './lib/socket';
 import { formatTime } from './lib/time';
 
-type Screen = 'loading' | 'pairing' | 'lock' | 'session' | 'expired' | 'maintenance';
+type Screen = 'loading' | 'pairing' | 'lock' | 'register' | 'session' | 'expired' | 'maintenance';
 
 const screen = ref<Screen>('loading');
 const config = ref<PairingConfig | null>(null);
@@ -31,9 +38,26 @@ let removeMaintenancePrompt: (() => void) | undefined;
 const minimized = ref(false);
 let removeSessionMinimize: (() => void) | undefined;
 
-const loginForm = ref({ username: '', pin: '' });
-const lastCredentials = ref({ username: '', pin: '' });
+const loginForm = ref({ username: '', password: '' });
+const lastCredentials = ref({ username: '' });
 const loginError = ref('');
+
+// Customer self-registration (from the lock screen).
+const registerForm = ref({
+  username: '',
+  password: '',
+  mobileNumber: '',
+});
+const registerError = ref('');
+const registerInfo = ref('');
+const registerSaving = ref(false);
+
+// Change password (while logged in).
+const passwordModalOpen = ref(false);
+const passwordForm = ref({ currentPassword: '', newPassword: '', confirmPassword: '' });
+const passwordError = ref('');
+const passwordInfo = ref('');
+const passwordSaving = ref(false);
 
 const sessionId = ref('');
 const sessionToken = ref('');
@@ -151,33 +175,30 @@ function resetSession() {
 
 function enterLockScreen() {
   resetSession();
-  loginForm.value = { username: lastCredentials.value.username, pin: '' };
+  loginForm.value = { username: lastCredentials.value.username, password: '' };
   screen.value = 'lock';
 }
 
 async function endActiveSession(): Promise<void> {
   if (!config.value) return;
 
-  const creds = lastCredentials.value;
-  const hasPinCreds = creds.username && creds.pin;
+  if (!sessionId.value) return;
 
-  if (hasPinCreds) {
-    await pinLogout(config.value.serverUrl, creds.username, creds.pin, config.value.computerId);
-    return;
-  }
-
-  if (sessionId.value) {
+  // Prefer ending via the computer's auth secret (works even if the user JWT
+  // expired); fall back to the session token. Both bank the remaining time.
+  try {
     await endComputerSession(
       config.value.serverUrl,
       config.value.computerId,
       config.value.authSecret,
       sessionId.value
     );
-    return;
-  }
-
-  if (sessionId.value && sessionToken.value) {
-    await endSession(config.value.serverUrl, sessionToken.value, sessionId.value);
+  } catch (err) {
+    if (sessionToken.value) {
+      await endSession(config.value.serverUrl, sessionToken.value, sessionId.value);
+    } else {
+      throw err;
+    }
   }
 }
 
@@ -272,17 +293,14 @@ async function handleLogin() {
   loginError.value = '';
 
   try {
-    const result = await pinLogin(
+    const result = await passwordLogin(
       config.value.serverUrl,
       loginForm.value.username.trim(),
-      loginForm.value.pin.trim(),
+      loginForm.value.password,
       config.value.computerId
     );
 
-    lastCredentials.value = {
-      username: loginForm.value.username.trim(),
-      pin: loginForm.value.pin.trim(),
-    };
+    lastCredentials.value = { username: loginForm.value.username.trim() };
 
     sessionId.value = result.sessionId;
     sessionToken.value = result.token;
@@ -313,6 +331,99 @@ async function handleLogout() {
 
   clearTimers();
   enterLockScreen();
+}
+
+function openRegister() {
+  registerForm.value = { username: '', password: '', mobileNumber: '' };
+  registerError.value = '';
+  registerInfo.value = '';
+  screen.value = 'register';
+}
+
+function backToLogin() {
+  registerError.value = '';
+  screen.value = 'lock';
+}
+
+async function handleRegister() {
+  if (!config.value) return;
+
+  registerError.value = '';
+  registerInfo.value = '';
+
+  const username = registerForm.value.username.trim();
+  const password = registerForm.value.password;
+  const mobileNumber = registerForm.value.mobileNumber.trim();
+
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
+    registerError.value = 'Username must be 3–32 letters, numbers, or underscores.';
+    return;
+  }
+  if (password.length < 6) {
+    registerError.value = 'Password must be at least 6 characters.';
+    return;
+  }
+
+  registerSaving.value = true;
+  try {
+    await registerUser(config.value.serverUrl, {
+      username,
+      password,
+      mobileNumber: mobileNumber || undefined,
+    });
+
+    loginForm.value = { username, password: '' };
+    lastCredentials.value = { username };
+    screen.value = 'lock';
+    registerInfo.value = '';
+    loginError.value = 'Account created! Ask staff to load time, then log in.';
+  } catch (err) {
+    registerError.value = err instanceof Error ? err.message : 'Registration failed';
+  } finally {
+    registerSaving.value = false;
+  }
+}
+
+function openPasswordModal() {
+  passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' };
+  passwordError.value = '';
+  passwordInfo.value = '';
+  passwordModalOpen.value = true;
+}
+
+async function handleChangePassword() {
+  if (!config.value || !sessionToken.value) {
+    passwordError.value = 'You must be logged in to change your password.';
+    return;
+  }
+
+  passwordError.value = '';
+  passwordInfo.value = '';
+
+  const { currentPassword, newPassword, confirmPassword } = passwordForm.value;
+
+  if (newPassword.length < 6) {
+    passwordError.value = 'New password must be at least 6 characters.';
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    passwordError.value = 'New passwords do not match.';
+    return;
+  }
+
+  passwordSaving.value = true;
+  try {
+    await changePassword(config.value.serverUrl, sessionToken.value, currentPassword, newPassword);
+    passwordInfo.value = 'Password updated successfully.';
+    passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' };
+    setTimeout(() => {
+      passwordModalOpen.value = false;
+    }, 1200);
+  } catch (err) {
+    passwordError.value = err instanceof Error ? err.message : 'Failed to change password';
+  } finally {
+    passwordSaving.value = false;
+  }
 }
 
 async function minimizeSession() {
@@ -480,17 +591,57 @@ onUnmounted(() => {
 
       <label class="field">
         <span>Username</span>
-        <input v-model="loginForm.username" @keyup.enter="handleLogin" />
+        <input v-model="loginForm.username" autocapitalize="none" @keyup.enter="handleLogin" />
       </label>
 
       <label class="field">
-        <span>PIN</span>
-        <input v-model="loginForm.pin" type="password" maxlength="6" @keyup.enter="handleLogin" />
+        <span>Password</span>
+        <input
+          v-model="loginForm.password"
+          type="password"
+          @keyup.enter="handleLogin"
+        />
       </label>
 
       <button class="primary" :disabled="!connected" @click="handleLogin">Start session</button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
+
+      <div class="lock-divider"><span>new here?</span></div>
+      <button class="secondary" :disabled="!connected" @click="openRegister">Create an account</button>
+
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
+    </div>
+
+    <div v-else-if="screen === 'register'" class="card">
+      <h1>Create account</h1>
+      <p class="muted">Register a new player account. Staff will load your time after payment.</p>
+
+      <label class="field">
+        <span>Username (3–32 letters, numbers, _)</span>
+        <input v-model="registerForm.username" autocapitalize="none" @keyup.enter="handleRegister" />
+      </label>
+
+      <label class="field">
+        <span>Password (min 6 characters, used to log in)</span>
+        <input
+          v-model="registerForm.password"
+          type="password"
+          @keyup.enter="handleRegister"
+        />
+      </label>
+
+      <label class="field">
+        <span>Mobile number (optional)</span>
+        <input v-model="registerForm.mobileNumber" inputmode="tel" @keyup.enter="handleRegister" />
+      </label>
+
+      <button class="primary" :disabled="!connected || registerSaving" @click="handleRegister">
+        {{ registerSaving ? 'Creating…' : 'Create account' }}
+      </button>
+      <p v-if="registerError" class="error">{{ registerError }}</p>
+      <button class="secondary" :disabled="registerSaving" @click="backToLogin">
+        Back to login
+      </button>
     </div>
 
     <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC.
@@ -542,6 +693,13 @@ onUnmounted(() => {
         <button class="secondary" @click="minimizeSession">Minimize</button>
         <button class="danger" @click="handleLogout">Logout & save time</button>
       </div>
+      <button
+        v-if="sessionToken"
+        class="link-btn"
+        @click="openPasswordModal"
+      >
+        Change password
+      </button>
     </div>
 
     <div v-else-if="screen === 'expired'" class="card">
@@ -582,6 +740,48 @@ onUnmounted(() => {
         <div class="prompt-actions">
           <button class="secondary" @click="maintenancePromptOpen = false">Cancel</button>
           <button class="primary" @click="submitMaintenanceCode">Unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Change password (while logged in) -->
+    <div v-if="passwordModalOpen" class="overlay">
+      <div class="card">
+        <h2>Change password</h2>
+        <p class="muted">Update the password for your account.</p>
+        <label class="field">
+          <span>Current password</span>
+          <input
+            v-model="passwordForm.currentPassword"
+            type="password"
+            @keyup.enter="handleChangePassword"
+          />
+        </label>
+        <label class="field">
+          <span>New password (min 6 characters)</span>
+          <input
+            v-model="passwordForm.newPassword"
+            type="password"
+            @keyup.enter="handleChangePassword"
+          />
+        </label>
+        <label class="field">
+          <span>Confirm new password</span>
+          <input
+            v-model="passwordForm.confirmPassword"
+            type="password"
+            @keyup.enter="handleChangePassword"
+          />
+        </label>
+        <p v-if="passwordError" class="error">{{ passwordError }}</p>
+        <p v-if="passwordInfo" class="info">{{ passwordInfo }}</p>
+        <div class="prompt-actions">
+          <button class="secondary" :disabled="passwordSaving" @click="passwordModalOpen = false">
+            Cancel
+          </button>
+          <button class="primary" :disabled="passwordSaving" @click="handleChangePassword">
+            {{ passwordSaving ? 'Saving…' : 'Update password' }}
+          </button>
         </div>
       </div>
     </div>
@@ -626,6 +826,48 @@ h1 {
   gap: 12px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.card > .primary,
+.card > .secondary {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.lock-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  margin: 18px 0 14px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.lock-divider::before,
+.lock-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #334155;
+}
+
+.link-btn {
+  background: transparent;
+  color: #94a3b8;
+  padding: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  color: #e2e8f0;
+}
+
+.info {
+  color: #4ade80;
+  margin-top: 12px;
 }
 
 .loyalty-box {

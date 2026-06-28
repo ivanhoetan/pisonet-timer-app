@@ -44,7 +44,7 @@ export async function apiRequest<T>(
   return data as T;
 }
 
-export interface PinLoginResponse {
+export interface SessionLoginResponse {
   token: string;
   sessionId: string;
   remainingSeconds: number;
@@ -52,15 +52,45 @@ export interface PinLoginResponse {
   loyaltyStamps: number;
 }
 
-export async function pinLogin(
+export async function passwordLogin(
   serverUrl: string,
   username: string,
-  pin: string,
+  password: string,
   computerId: string
-): Promise<PinLoginResponse> {
-  return apiRequest<PinLoginResponse>(serverUrl, '/auth/pin-login', {
+): Promise<SessionLoginResponse> {
+  return apiRequest<SessionLoginResponse>(serverUrl, '/auth/password-login', {
     method: 'POST',
-    body: JSON.stringify({ username, pin, computerId }),
+    body: JSON.stringify({ username, password, computerId }),
+  });
+}
+
+export interface RegisterPayload {
+  username: string;
+  password: string;
+  pin?: string;
+  mobileNumber?: string;
+}
+
+export async function registerUser(
+  serverUrl: string,
+  payload: RegisterPayload
+): Promise<{ token: string }> {
+  return apiRequest(serverUrl, '/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changePassword(
+  serverUrl: string,
+  token: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ ok: boolean }> {
+  return apiRequest(serverUrl, '/auth/change-password', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ currentPassword, newPassword }),
   });
 }
 

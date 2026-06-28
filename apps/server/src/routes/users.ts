@@ -89,7 +89,7 @@ usersRouter.post(
       const user = await User.create({
         username,
         passwordHash: await hashSecret(password),
-        pinHash: await hashSecret(pin),
+        pinHash: pin ? await hashSecret(pin) : undefined,
         mobileNumber,
         balanceSeconds: (initialMinutes ?? 0) * 60,
       });
