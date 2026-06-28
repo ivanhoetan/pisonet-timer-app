@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUser extends Document {
   username: string;
+  nickname?: string;
   passwordHash: string;
   pinHash?: string;
   balanceSeconds: number;
@@ -15,6 +16,8 @@ export interface IUser extends Document {
 const userSchema = new Schema<IUser>(
   {
     username: { type: String, required: true, unique: true, index: true },
+    // Optional friendly display name shown in the admin portal.
+    nickname: { type: String },
     passwordHash: { type: String, required: true },
     // Optional: PIN is a legacy/fast-login credential. Password is primary.
     pinHash: { type: String },

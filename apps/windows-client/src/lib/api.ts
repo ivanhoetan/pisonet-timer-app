@@ -84,6 +84,7 @@ export async function passwordLogin(
 
 export interface RegisterPayload {
   username: string;
+  nickname?: string;
   password: string;
   pin?: string;
   mobileNumber?: string;

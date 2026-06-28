@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const registerSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
+  nickname: z.string().max(40).optional(),
   password: z.string().min(6).max(128),
   pin: z.string().regex(/^\d{4,6}$/).optional(),
   mobileNumber: z.string().optional(),
@@ -104,6 +105,7 @@ export const maintenanceSchema = z.object({
 
 export const adminCreateUserSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
+  nickname: z.string().max(40).optional(),
   password: z.string().min(6).max(128),
   pin: z.string().regex(/^\d{4,6}$/).optional(),
   mobileNumber: z.string().max(20).optional(),
@@ -113,6 +115,7 @@ export const adminCreateUserSchema = z.object({
 export const adminUpdateUserSchema = z
   .object({
     username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional(),
+    nickname: z.string().max(40).optional(),
     password: z.string().min(6).max(128).optional(),
     pin: z.string().regex(/^\d{4,6}$/).optional(),
     mobileNumber: z.string().max(20).optional(),

@@ -25,6 +25,7 @@ const editingId = ref<string>('');
 
 const form = ref({
   username: '',
+  nickname: '',
   password: '',
   pin: '',
   mobileNumber: '',
@@ -85,6 +86,7 @@ function showToast(msg: string) {
 function openCreate() {
   form.value = {
     username: '',
+    nickname: '',
     password: '',
     pin: '',
     mobileNumber: '',
@@ -104,6 +106,7 @@ function openEdit(u: AdminUser) {
   editingId.value = u.id;
   form.value = {
     username: u.username,
+    nickname: u.nickname || '',
     password: '',
     pin: '',
     mobileNumber: u.mobileNumber || '',
@@ -147,6 +150,7 @@ async function submit() {
         username: form.value.username.trim(),
         password: form.value.password,
       };
+      if (form.value.nickname.trim()) payload.nickname = form.value.nickname.trim();
       if (form.value.pin.trim()) payload.pin = form.value.pin.trim();
       if (form.value.mobileNumber.trim()) payload.mobileNumber = form.value.mobileNumber.trim();
       if (form.value.initialMinutes > 0) payload.initialMinutes = Number(form.value.initialMinutes);
@@ -155,6 +159,7 @@ async function submit() {
     } else if (mode.value === 'edit') {
       const payload: Record<string, unknown> = {};
       if (form.value.username.trim()) payload.username = form.value.username.trim();
+      payload.nickname = form.value.nickname.trim();
       if (form.value.password) payload.password = form.value.password;
       if (form.value.pin) payload.pin = form.value.pin;
       payload.mobileNumber = form.value.mobileNumber.trim();
@@ -305,7 +310,12 @@ onUnmounted(() => {
           </thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
-              <td>{{ u.username }}</td>
+              <td>
+                <div class="user-name-cell">
+                  <span class="user-name-primary">{{ u.username }}</span>
+                  <span v-if="u.nickname" class="user-name-nick">{{ u.nickname }}</span>
+                </div>
+              </td>
               <td :style="liveTimeStyle(u)">
                 <span v-if="isLive(u)" class="balance-live">
                   <span class="balance-live-dot" aria-hidden="true"></span>
@@ -354,7 +364,10 @@ onUnmounted(() => {
     <div class="user-cards">
       <div v-for="u in users" :key="u.id" class="card user-card">
         <div class="uc-head">
-          <span class="uc-name">{{ u.username }}</span>
+          <div class="user-name-cell">
+            <span class="uc-name">{{ u.username }}</span>
+            <span v-if="u.nickname" class="user-name-nick">{{ u.nickname }}</span>
+          </div>
           <div class="uc-badges">
             <span v-if="u.activeSession" class="badge inuse">online</span>
             <span class="badge" :class="u.status">{{ u.status }}</span>
@@ -419,6 +432,10 @@ onUnmounted(() => {
         <label class="field">
           <span>Username</span>
           <input v-model="form.username" placeholder="juandelacruz" />
+        </label>
+        <label class="field">
+          <span>Nickname (optional)</span>
+          <input v-model="form.nickname" placeholder="Juan" />
         </label>
         <label class="field">
           <span>{{ mode === 'edit' ? 'New password (leave blank to keep)' : 'Password' }}</span>
@@ -550,6 +567,21 @@ onUnmounted(() => {
 .status-filter {
   width: auto;
   min-width: 150px;
+}
+
+.user-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name-primary {
+  font-weight: 600;
+}
+
+.user-name-nick {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .reset-code {

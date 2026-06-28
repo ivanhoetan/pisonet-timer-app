@@ -52,6 +52,7 @@ const loginError = ref('');
 // Customer self-registration (from the lock screen).
 const registerForm = ref({
   username: '',
+  nickname: '',
   password: '',
   mobileNumber: '',
 });
@@ -372,7 +373,7 @@ async function handleLogout() {
 }
 
 function openRegister() {
-  registerForm.value = { username: '', password: '', mobileNumber: '' };
+  registerForm.value = { username: '', nickname: '', password: '', mobileNumber: '' };
   registerError.value = '';
   registerInfo.value = '';
   screen.value = 'register';
@@ -390,6 +391,7 @@ async function handleRegister() {
   registerInfo.value = '';
 
   const username = registerForm.value.username.trim();
+  const nickname = registerForm.value.nickname.trim();
   const password = registerForm.value.password;
   const mobileNumber = registerForm.value.mobileNumber.trim();
 
@@ -406,6 +408,7 @@ async function handleRegister() {
   try {
     await registerUser(config.value.serverUrl, {
       username,
+      nickname: nickname || undefined,
       password,
       mobileNumber: mobileNumber || undefined,
     });
@@ -680,6 +683,11 @@ onUnmounted(() => {
       <label class="field">
         <span>Username (3–32 letters, numbers, _)</span>
         <input v-model="registerForm.username" autocapitalize="none" @keyup.enter="handleRegister" />
+      </label>
+
+      <label class="field">
+        <span>Nickname (optional)</span>
+        <input v-model="registerForm.nickname" @keyup.enter="handleRegister" />
       </label>
 
       <label class="field">

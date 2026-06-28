@@ -14,6 +14,7 @@ function serializeUser(user: IUser) {
   return {
     id: user._id,
     username: user.username,
+    nickname: user.nickname,
     balanceSeconds: user.balanceSeconds,
     mobileNumber: user.mobileNumber,
     status: user.status,
@@ -81,7 +82,7 @@ usersRouter.post(
   validateBody(adminCreateUserSchema),
   async (req, res) => {
     try {
-      const { username, password, pin, mobileNumber, initialMinutes } = req.body;
+      const { username, nickname, password, pin, mobileNumber, initialMinutes } = req.body;
 
       const existing = await User.findOne({ username });
       if (existing) {
@@ -91,6 +92,7 @@ usersRouter.post(
 
       const user = await User.create({
         username,
+        nickname: nickname?.trim() || undefined,
         passwordHash: await hashSecret(password),
         pinHash: pin ? await hashSecret(pin) : undefined,
         mobileNumber,
@@ -163,7 +165,7 @@ usersRouter.patch(
   validateBody(adminUpdateUserSchema),
   async (req, res) => {
     try {
-      const { username, password, pin, mobileNumber, status } = req.body;
+      const { username, nickname, password, pin, mobileNumber, status } = req.body;
 
       const user = await User.findById(req.params.id);
       if (!user) {
@@ -182,6 +184,10 @@ usersRouter.patch(
 
       const changes: string[] = [];
       if (username) changes.push('username');
+      if (nickname !== undefined) {
+        user.nickname = nickname.trim() || undefined;
+        changes.push('nickname');
+      }
       if (password) {
         user.passwordHash = await hashSecret(password);
         changes.push('password');

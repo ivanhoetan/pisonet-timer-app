@@ -28,7 +28,7 @@ export const authRouter = Router();
 
 authRouter.post('/register', validateBody(registerSchema), async (req, res) => {
   try {
-    const { username, password, pin, mobileNumber } = req.body;
+    const { username, nickname, password, pin, mobileNumber } = req.body;
 
     const existing = await User.findOne({ username });
     if (existing) {
@@ -38,6 +38,7 @@ authRouter.post('/register', validateBody(registerSchema), async (req, res) => {
 
     const user = await User.create({
       username,
+      nickname: nickname?.trim() || undefined,
       passwordHash: await hashSecret(password),
       pinHash: pin ? await hashSecret(pin) : undefined,
       mobileNumber,

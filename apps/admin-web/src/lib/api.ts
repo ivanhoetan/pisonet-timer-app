@@ -65,6 +65,7 @@ export interface ActiveSessionInfo {
 export interface AdminUser {
   id: string;
   username: string;
+  nickname?: string;
   balanceSeconds: number;
   mobileNumber?: string;
   status: 'active' | 'disabled';
