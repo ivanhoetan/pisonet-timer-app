@@ -12,6 +12,7 @@ import {
 
 const users = ref<AdminUser[]>([]);
 const search = ref('');
+const statusFilter = ref<'active' | 'disabled' | 'all'>('active');
 const loading = ref(false);
 const error = ref('');
 const toast = ref('');
@@ -54,8 +55,10 @@ async function load(silent = false) {
     error.value = '';
   }
   try {
-    const q = search.value.trim() ? `?search=${encodeURIComponent(search.value.trim())}` : '';
-    users.value = await api.get<AdminUser[]>(`/users${q}`);
+    const params = new URLSearchParams();
+    if (search.value.trim()) params.set('search', search.value.trim());
+    params.set('status', statusFilter.value);
+    users.value = await api.get<AdminUser[]>(`/users?${params.toString()}`);
     if (!silent) error.value = '';
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
@@ -269,6 +272,11 @@ onUnmounted(() => {
   <div class="toolbar">
     <input v-model="search" placeholder="Search username…" @keyup.enter="load" />
     <button class="btn-ghost" @click="load"><Icon name="search" />Search</button>
+    <select v-model="statusFilter" class="status-filter" @change="load()">
+      <option value="active">Active only</option>
+      <option value="disabled">Disabled only</option>
+      <option value="all">All statuses</option>
+    </select>
     <div class="spacer"></div>
     <button class="btn-primary" @click="openCreate"><Icon name="userPlus" />New user</button>
   </div>
@@ -539,6 +547,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.status-filter {
+  width: auto;
+  min-width: 150px;
+}
+
 .reset-code {
   font-size: 32px;
   font-weight: 700;

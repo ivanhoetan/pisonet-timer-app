@@ -55,9 +55,12 @@ usersRouter.get('/me', authMiddleware, userMiddleware, async (req: AuthRequest, 
 usersRouter.get('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
-    const filter = search
-      ? { username: { $regex: search, $options: 'i' } }
-      : {};
+    // status filter: 'active' (default), 'disabled', or 'all'.
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'active';
+
+    const filter: Record<string, unknown> = {};
+    if (search) filter.username = { $regex: search, $options: 'i' };
+    if (status === 'active' || status === 'disabled') filter.status = status;
 
     const users = await User.find(filter)
       .select('-passwordHash -pinHash')
