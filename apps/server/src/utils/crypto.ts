@@ -28,3 +28,14 @@ export function generatePairingCode(): string {
 }
 
 export const PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
+
+// Short temporary password for admin-initiated resets. Uses the same
+// unambiguous alphabet so customers can read and type it without mistakes.
+export function generateTempPassword(length = 8): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += PAIRING_ALPHABET[bytes[i] % PAIRING_ALPHABET.length];
+  }
+  return code;
+}

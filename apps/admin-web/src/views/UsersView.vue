@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { api, ApiError, type AdminUser } from '../lib/api';
 import Icon from '../components/Icon.vue';
 import {
+  formatClock,
   formatDuration,
   pesosToMinutes,
   rewardsAvailable,
@@ -35,17 +36,41 @@ const form = ref({
   paymentReference: '',
 });
 
-async function load() {
-  loading.value = true;
-  error.value = '';
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+
+function isLive(u: AdminUser): boolean {
+  return u.activeSession != null;
+}
+
+function liveTimeStyle(u: AdminUser): Record<string, string> {
+  if (!u.activeSession || u.activeSession.remainingSeconds >= 120) return {};
+  return { color: 'var(--warning)' };
+}
+
+async function load(silent = false) {
+  if (!silent) {
+    loading.value = true;
+    error.value = '';
+  }
   try {
     const q = search.value.trim() ? `?search=${encodeURIComponent(search.value.trim())}` : '';
     users.value = await api.get<AdminUser[]>(`/users${q}`);
+    if (!silent) error.value = '';
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
-    error.value = err instanceof ApiError ? err.message : 'Failed to load users';
+    if (!silent) error.value = err instanceof ApiError ? err.message : 'Failed to load users';
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
+  }
+}
+
+// Smoothly tick down live session timers between server refreshes.
+function tickLocal() {
+  for (const u of users.value) {
+    if (u.activeSession && u.activeSession.remainingSeconds > 0) {
+      u.activeSession.remainingSeconds -= 1;
+    }
   }
 }
 
@@ -182,6 +207,31 @@ async function toggleStatus(u: AdminUser) {
   }
 }
 
+// Temporary password shown once after an admin reset.
+const resetResult = ref<{ username: string; tempPassword: string } | null>(null);
+
+function copy(text: string) {
+  navigator.clipboard?.writeText(text).then(() => showToast('Copied'));
+}
+
+async function resetPassword(u: AdminUser) {
+  if (
+    !confirm(
+      `Reset password for ${u.username}? A temporary password will be generated and their old one will stop working.`
+    )
+  ) {
+    return;
+  }
+  try {
+    const res = await api.post<{ username: string; tempPassword: string }>(
+      `/users/${u.id}/reset-password`
+    );
+    resetResult.value = res;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : 'Reset failed');
+  }
+}
+
 async function redeemReward(u: AdminUser) {
   const available = rewardsAvailable(u.loyaltyStamps);
   if (available <= 0) return;
@@ -200,7 +250,16 @@ async function redeemReward(u: AdminUser) {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  tickTimer = setInterval(tickLocal, 1000);
+  syncTimer = setInterval(() => load(true), 10000);
+});
+
+onUnmounted(() => {
+  if (tickTimer) clearInterval(tickTimer);
+  if (syncTimer) clearInterval(syncTimer);
+});
 </script>
 
 <template>
@@ -239,7 +298,13 @@ onMounted(load);
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.username }}</td>
-              <td>{{ formatDuration(u.balanceSeconds) }}</td>
+              <td :style="liveTimeStyle(u)">
+                <span v-if="isLive(u)" class="balance-live">
+                  <span class="balance-live-dot" aria-hidden="true"></span>
+                  {{ formatClock(u.activeSession!.remainingSeconds) }}
+                </span>
+                <span v-else>{{ formatDuration(u.balanceSeconds) }}</span>
+              </td>
               <td>
                 <span class="stamp-count">{{ u.loyaltyStamps }}</span>
                 <span v-if="rewardsAvailable(u.loyaltyStamps) > 0" class="badge reward">
@@ -265,6 +330,7 @@ onMounted(load);
                     <Icon name="gift" :size="14" />Redeem
                   </button>
                   <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
+                  <button class="btn-ghost btn-sm" @click="resetPassword(u)"><Icon name="key" :size="14" />Reset PW</button>
                   <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
                     <Icon :name="u.status === 'active' ? 'lock' : 'check'" :size="14" />{{ u.status === 'active' ? 'Disable' : 'Enable' }}
                   </button>
@@ -287,8 +353,14 @@ onMounted(load);
           </div>
         </div>
         <div class="uc-balance">
-          <span class="uc-balance-value">{{ formatDuration(u.balanceSeconds) }}</span>
-          <span class="uc-balance-label">remaining</span>
+          <span class="uc-balance-value" :style="liveTimeStyle(u)">
+            <span v-if="isLive(u)" class="balance-live">
+              <span class="balance-live-dot" aria-hidden="true"></span>
+              {{ formatClock(u.activeSession!.remainingSeconds) }}
+            </span>
+            <template v-else>{{ formatDuration(u.balanceSeconds) }}</template>
+          </span>
+          <span class="uc-balance-label">{{ isLive(u) ? 'live' : 'wallet' }}</span>
         </div>
         <div class="uc-row">
           <span class="uc-label">Mobile</span>
@@ -318,6 +390,7 @@ onMounted(load);
             <Icon name="gift" :size="14" />Redeem
           </button>
           <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
+          <button class="btn-ghost btn-sm" @click="resetPassword(u)"><Icon name="key" :size="14" />Reset PW</button>
           <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
             <Icon :name="u.status === 'active' ? 'lock' : 'check'" :size="14" />{{ u.status === 'active' ? 'Disable' : 'Enable' }}
           </button>
@@ -435,5 +508,75 @@ onMounted(load);
     </div>
   </div>
 
+  <!-- Temporary password modal (shown once) -->
+  <div v-if="resetResult" class="modal-backdrop" @click.self="resetResult = null">
+    <div class="card modal">
+      <h3>Temporary password for {{ resetResult.username }}</h3>
+      <p class="muted" style="margin-top: -8px">
+        Give this to the customer. They log in on the PC with it, then use
+        <strong>Change password</strong> in the app to set their own.
+      </p>
+
+      <div class="reset-code">{{ resetResult.tempPassword }}</div>
+      <button
+        class="btn-primary"
+        style="width: 100%; margin-bottom: 8px"
+        @click="copy(resetResult.tempPassword)"
+      >
+        <Icon name="copy" :size="14" />Copy password
+      </button>
+      <p class="muted" style="font-size: 13px">
+        Their old password no longer works. This code is shown only once.
+      </p>
+
+      <div class="modal-actions">
+        <button class="btn-primary" @click="resetResult = null"><Icon name="check" />Done</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="toast" class="toast">{{ toast }}</div>
 </template>
+
+<style scoped>
+.reset-code {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #0f172a;
+  color: #38bdf8;
+  border-radius: 12px;
+  padding: 18px 10px;
+  margin: 8px 0 12px;
+  user-select: all;
+  word-break: break-all;
+}
+
+.balance-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+</style>

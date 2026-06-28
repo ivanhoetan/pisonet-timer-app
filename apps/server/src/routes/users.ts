@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { adminCreateUserSchema, adminUpdateUserSchema } from '@pisonet/shared';
 import { User, IUser } from '../models/User';
-import { hashSecret } from '../utils/crypto';
+import { hashSecret, generateTempPassword } from '../utils/crypto';
 import { validateBody } from '../middleware/validate';
 import { authMiddleware, adminMiddleware, userMiddleware, AuthRequest } from '../middleware/auth';
 import { sessionEngine } from '../services/sessionEngine';
@@ -121,6 +121,35 @@ usersRouter.get('/:id', authMiddleware, adminMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Admin password reset: set a short temporary password the customer can use to
+// log in on the Windows client, then change in-app. Returned once to the admin.
+usersRouter.post('/:id/reset-password', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const tempPassword = generateTempPassword();
+    user.passwordHash = await hashSecret(tempPassword);
+    await user.save();
+
+    recordAudit(req as AuthRequest, {
+      action: 'user_password_reset',
+      targetType: 'user',
+      targetId: user._id.toString(),
+      targetLabel: user.username,
+      details: 'temporary password issued',
+    });
+
+    res.json({ username: user.username, tempPassword });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

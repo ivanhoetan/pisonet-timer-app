@@ -14,6 +14,7 @@ const ACTION_LABELS: Record<string, string> = {
   loyalty_redeem: 'Loyalty redeemed',
   user_create: 'User created',
   user_update: 'User updated',
+  user_password_reset: 'Password reset',
   admin_create: 'Admin created',
   computer_register: 'PC registered',
   computer_pairing_code: 'PC pairing code generated',
