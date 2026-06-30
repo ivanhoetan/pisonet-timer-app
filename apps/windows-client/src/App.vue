@@ -48,6 +48,7 @@ let removeSessionMinimize: (() => void) | undefined;
 const loginForm = ref({ username: '', password: '' });
 const lastCredentials = ref({ username: '' });
 const loginError = ref('');
+const loggingIn = ref(false);
 
 // Customer self-registration (from the lock screen).
 const registerForm = ref({
@@ -327,9 +328,10 @@ async function savePairing() {
 }
 
 async function handleLogin() {
-  if (!config.value) return;
+  if (!config.value || loggingIn.value) return;
 
   loginError.value = '';
+  loggingIn.value = true;
 
   try {
     const result = await passwordLogin(
@@ -351,6 +353,8 @@ async function handleLogin() {
     startCountdown();
   } catch (err) {
     loginError.value = err instanceof Error ? err.message : 'Login failed';
+  } finally {
+    loggingIn.value = false;
   }
 }
 
@@ -655,7 +659,12 @@ onUnmounted(() => {
 
       <label class="field">
         <span>Username</span>
-        <input v-model="loginForm.username" autocapitalize="none" @keyup.enter="handleLogin" />
+        <input
+          v-model="loginForm.username"
+          autocapitalize="none"
+          :disabled="loggingIn"
+          @keyup.enter="handleLogin"
+        />
       </label>
 
       <label class="field">
@@ -663,15 +672,24 @@ onUnmounted(() => {
         <input
           v-model="loginForm.password"
           type="password"
+          :disabled="loggingIn"
           @keyup.enter="handleLogin"
         />
       </label>
 
-      <button class="primary" :disabled="!connected" @click="handleLogin">Start session</button>
+      <button class="primary" :disabled="!connected || loggingIn" @click="handleLogin">
+        <span v-if="loggingIn" class="btn-loading">
+          <span class="spinner" aria-hidden="true"></span>
+          Logging in…
+        </span>
+        <span v-else>Start session</span>
+      </button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
 
       <div class="lock-divider"><span>new here?</span></div>
-      <button class="secondary" :disabled="!connected" @click="openRegister">Create an account</button>
+      <button class="secondary" :disabled="!connected || loggingIn" @click="openRegister">
+        Create an account
+      </button>
 
       <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
@@ -969,6 +987,28 @@ h1 {
 .info {
   color: #4ade80;
   margin-top: 12px;
+}
+
+.btn-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loyalty-box {
