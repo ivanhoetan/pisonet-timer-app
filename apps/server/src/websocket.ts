@@ -1,8 +1,23 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { WsEvents } from '@pisonet/shared';
+import { WsEvents, ComputerStatus } from '@pisonet/shared';
 import { Computer } from './models/Computer';
 import { sessionEngine } from './services/sessionEngine';
+
+// Decide a computer's status when its client (re)connects. Admin-controlled
+// states are sticky; a PC with a live session stays IN_USE; otherwise ONLINE.
+function resolveConnectedStatus(
+  current: ComputerStatus,
+  computerId: string
+): ComputerStatus {
+  if (current === ComputerStatus.LOCKED || current === ComputerStatus.MAINTENANCE) {
+    return current;
+  }
+  if (sessionEngine.getByComputerId(computerId)) {
+    return ComputerStatus.IN_USE;
+  }
+  return ComputerStatus.ONLINE;
+}
 
 export function setupWebSocket(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
@@ -41,14 +56,18 @@ async function handleConnection(socket: Socket, io: Server): Promise<void> {
   const room = `computer:${computerId}`;
   await socket.join(room);
 
+  // Don't clobber the real status on (re)connect. A client reconnect must not
+  // reset an in-use PC to plain ONLINE, and must never clear an admin-controlled
+  // LOCKED/MAINTENANCE state.
+  const onConnectStatus = resolveConnectedStatus(computer.status, computerId);
   await Computer.findByIdAndUpdate(computerId, {
-    status: 'ONLINE',
+    status: onConnectStatus,
     lastOnline: new Date(),
   });
 
   io.to(room).emit(WsEvents.COMPUTER_STATUS, {
     computerId,
-    status: 'ONLINE',
+    status: onConnectStatus,
   });
 
   sessionEngine.resyncComputer(computerId);
@@ -59,10 +78,19 @@ async function handleConnection(socket: Socket, io: Server): Promise<void> {
   });
 
   socket.on('disconnect', () => {
-    void Computer.findByIdAndUpdate(computerId, { status: 'OFFLINE' });
-    io.to(room).emit(WsEvents.COMPUTER_STATUS, {
-      computerId,
-      status: 'OFFLINE',
-    });
+    // Preserve LOCKED/MAINTENANCE, and keep an active paid session marked IN_USE
+    // (its time keeps counting server-side); only an idle PC goes OFFLINE.
+    void (async () => {
+      const current = await Computer.findById(computerId).select('status').lean();
+      const status = current?.status;
+      if (status === 'LOCKED' || status === 'MAINTENANCE') return;
+      if (sessionEngine.getByComputerId(computerId)) return;
+
+      await Computer.findByIdAndUpdate(computerId, { status: 'OFFLINE' });
+      io.to(room).emit(WsEvents.COMPUTER_STATUS, {
+        computerId,
+        status: 'OFFLINE',
+      });
+    })();
   });
 }
