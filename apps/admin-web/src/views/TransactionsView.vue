@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { api, ApiError, type Transaction } from '../lib/api';
+import { api, ApiError, type Paginated, type Transaction } from '../lib/api';
 import Icon from '../components/Icon.vue';
+import Pagination from '../components/Pagination.vue';
 import { formatDateTime, formatPesos } from '../lib/format';
 
 const transactions = ref<Transaction[]>([]);
 const loading = ref(false);
 const error = ref('');
+
+const page = ref(1);
+const pageSize = ref(25);
+const total = ref(0);
 
 function usernameOf(t: Transaction): string {
   if (t.userId && typeof t.userId === 'object') return t.userId.username;
@@ -32,7 +37,12 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    transactions.value = await api.get<Transaction[]>('/transactions');
+    const res = await api.get<Paginated<Transaction>>(
+      `/transactions?page=${page.value}&pageSize=${pageSize.value}`
+    );
+    transactions.value = res.items;
+    total.value = res.total;
+    page.value = res.page;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
     error.value = err instanceof ApiError ? err.message : 'Failed to load transactions';
@@ -41,19 +51,23 @@ async function load() {
   }
 }
 
+function changePage(p: number) {
+  page.value = p;
+  load();
+}
+
 onMounted(load);
 </script>
 
 <template>
   <h1 class="page-title">Transactions</h1>
-  <p class="page-sub">Most recent 100 time changes (top-ups and corrections).</p>
+  <p class="page-sub">All time changes (top-ups and corrections), newest first.</p>
 
   <div class="toolbar">
     <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
     <div class="spacer"></div>
     <span class="muted">
-      {{ transactions.length }} records · +{{ totalAdded }} / −{{ totalRemoved }} min ·
-      {{ formatPesos(totalRevenue) }}
+      This page: +{{ totalAdded }} / −{{ totalRemoved }} min · {{ formatPesos(totalRevenue) }}
     </span>
   </div>
 
@@ -89,4 +103,12 @@ onMounted(load);
       </table>
     </div>
   </div>
+
+  <Pagination
+    :page="page"
+    :page-size="pageSize"
+    :total="total"
+    label="transactions"
+    @update:page="changePage"
+  />
 </template>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { api, ApiError, type LoyaltyReport } from '../lib/api';
 import Icon from '../components/Icon.vue';
+import Pagination from '../components/Pagination.vue';
 import { formatDateTime } from '../lib/format';
 
 function pad(n: number): string {
@@ -21,6 +22,24 @@ const to = ref(dateStr(today));
 const report = ref<LoyaltyReport | null>(null);
 const loading = ref(false);
 const error = ref('');
+
+// Client-side pagination for the (potentially long) activity log. When printing
+// we render every row so the saved PDF holds the full report.
+const eventsPage = ref(1);
+const eventsPageSize = ref(25);
+const printing = ref(false);
+
+const pagedEvents = computed(() => {
+  const events = report.value?.events ?? [];
+  if (printing.value) return events;
+  const start = (eventsPage.value - 1) * eventsPageSize.value;
+  return events.slice(start, start + eventsPageSize.value);
+});
+
+// Reset to the first page whenever a new report loads.
+watch(report, () => {
+  eventsPage.value = 1;
+});
 
 async function load() {
   loading.value = true;
@@ -102,8 +121,11 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-function printReport() {
+async function printReport() {
+  printing.value = true;
+  await nextTick();
   window.print();
+  printing.value = false;
 }
 
 onMounted(load);
@@ -218,7 +240,7 @@ onMounted(load);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(e, i) in report.events" :key="i">
+              <tr v-for="(e, i) in pagedEvents" :key="i">
                 <td>{{ formatDateTime(e.createdAt) }}</td>
                 <td>{{ e.username }}</td>
                 <td>
@@ -233,6 +255,15 @@ onMounted(load);
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="no-print">
+          <Pagination
+            :page="eventsPage"
+            :page-size="eventsPageSize"
+            :total="report.events.length"
+            label="events"
+            @update:page="(p: number) => (eventsPage = p)"
+          />
         </div>
       </div>
     </template>

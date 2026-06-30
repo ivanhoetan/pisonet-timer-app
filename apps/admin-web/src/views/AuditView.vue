@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { api, ApiError, type AuditEntry } from '../lib/api';
+import { api, ApiError, type AuditEntry, type Paginated } from '../lib/api';
 import Icon from '../components/Icon.vue';
+import Pagination from '../components/Pagination.vue';
 import { formatDateTime } from '../lib/format';
 
 const logs = ref<AuditEntry[]>([]);
 const loading = ref(false);
 const error = ref('');
+
+const page = ref(1);
+const pageSize = ref(25);
+const total = ref(0);
 
 const ACTION_LABELS: Record<string, string> = {
   topup: 'Top-up',
@@ -32,7 +37,12 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    logs.value = await api.get<AuditEntry[]>('/audit');
+    const res = await api.get<Paginated<AuditEntry>>(
+      `/audit?page=${page.value}&pageSize=${pageSize.value}`
+    );
+    logs.value = res.items;
+    total.value = res.total;
+    page.value = res.page;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return;
     error.value = err instanceof ApiError ? err.message : 'Failed to load audit log';
@@ -41,12 +51,17 @@ async function load() {
   }
 }
 
+function changePage(p: number) {
+  page.value = p;
+  load();
+}
+
 onMounted(load);
 </script>
 
 <template>
   <h1 class="page-title">Audit log</h1>
-  <p class="page-sub">A record of every admin action (most recent 200).</p>
+  <p class="page-sub">A record of every admin action, newest first.</p>
 
   <div class="toolbar">
     <button class="btn-ghost" @click="load"><Icon name="refresh" />Refresh</button>
@@ -80,4 +95,12 @@ onMounted(load);
       </table>
     </div>
   </div>
+
+  <Pagination
+    :page="page"
+    :page-size="pageSize"
+    :total="total"
+    label="entries"
+    @update:page="changePage"
+  />
 </template>

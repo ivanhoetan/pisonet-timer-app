@@ -172,14 +172,22 @@ transactionsRouter.post(
   }
 );
 
-transactionsRouter.get('/', authMiddleware, adminMiddleware, async (_req, res) => {
+transactionsRouter.get('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const transactions = await Transaction.find()
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(5, parseInt(String(req.query.pageSize ?? '25'), 10) || 25)
+    );
+
+    const total = await Transaction.countDocuments();
+    const items = await Transaction.find()
       .populate('userId', 'username')
       .sort({ createdAt: -1 })
-      .limit(100);
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
 
-    res.json(transactions);
+    res.json({ items, total, page, pageSize });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to list transactions' });

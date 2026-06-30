@@ -54,6 +54,13 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
 };
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ---- Typed responses ----
 
 export interface ActiveSessionInfo {
