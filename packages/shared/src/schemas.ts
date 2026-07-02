@@ -99,6 +99,12 @@ export const redeemLoyaltySchema = z.object({
   rewards: z.number().int().positive().optional(),
 });
 
+export const adjustStampsSchema = z.object({
+  userId: z.string().min(1),
+  stampsRemoved: z.number().int().positive(),
+  reason: z.string().max(200).optional(),
+});
+
 export const maintenanceSchema = z.object({
   enabled: z.boolean(),
 });

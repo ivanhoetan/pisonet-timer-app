@@ -17,7 +17,7 @@ const loading = ref(false);
 const error = ref('');
 const toast = ref('');
 
-type Mode = 'create' | 'edit' | 'topup' | 'adjust' | null;
+type Mode = 'create' | 'edit' | 'topup' | 'adjust' | 'stampAdjust' | null;
 const mode = ref<Mode>(null);
 const saving = ref(false);
 const formError = ref('');
@@ -34,6 +34,8 @@ const form = ref({
   topupPesos: 1,
   minutesRemoved: 10,
   adjustReason: '',
+  stampsRemoved: 1,
+  stampAdjustReason: '',
   paymentMethod: 'manual',
   paymentReference: '',
 });
@@ -95,6 +97,8 @@ function openCreate() {
     topupPesos: 1,
     minutesRemoved: 10,
     adjustReason: '',
+    stampsRemoved: 1,
+    stampAdjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
   };
@@ -115,6 +119,8 @@ function openEdit(u: AdminUser) {
     topupPesos: 1,
     minutesRemoved: 10,
     adjustReason: '',
+    stampsRemoved: 1,
+    stampAdjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
   };
@@ -139,6 +145,15 @@ function openAdjust(u: AdminUser) {
   form.value.adjustReason = '';
   formError.value = '';
   mode.value = 'adjust';
+}
+
+function openStampAdjust(u: AdminUser) {
+  editingId.value = u.id;
+  form.value.username = u.username;
+  form.value.stampsRemoved = 1;
+  form.value.stampAdjustReason = '';
+  formError.value = '';
+  mode.value = 'stampAdjust';
 }
 
 async function submit() {
@@ -193,6 +208,30 @@ async function submit() {
         reason: form.value.adjustReason.trim() || undefined,
       });
       showToast(`Removed ${minutes} min`);
+    } else if (mode.value === 'stampAdjust') {
+      const stamps = Number(form.value.stampsRemoved);
+      if (!stamps || stamps < 1) {
+        formError.value = 'Enter at least 1 stamp to remove';
+        return;
+      }
+      const user = users.value.find((u) => u.id === editingId.value);
+      if (user && stamps > user.loyaltyStamps) {
+        formError.value = `User only has ${user.loyaltyStamps} stamp(s)`;
+        return;
+      }
+      if (
+        !confirm(
+          `Remove ${stamps} stamp(s) from ${form.value.username}? This does not remove play time.`
+        )
+      ) {
+        return;
+      }
+      await api.post('/loyalty/adjust-stamps', {
+        userId: editingId.value,
+        stampsRemoved: stamps,
+        reason: form.value.stampAdjustReason.trim() || undefined,
+      });
+      showToast(`Removed ${stamps} stamp(s)`);
     }
     mode.value = null;
     await load();
@@ -341,6 +380,13 @@ onUnmounted(() => {
                   <button class="btn-primary btn-sm" @click="openTopup(u)"><Icon name="plus" :size="14" />Time</button>
                   <button class="btn-warning btn-sm" @click="openAdjust(u)"><Icon name="minus" :size="14" />Time</button>
                   <button
+                    v-if="u.loyaltyStamps > 0"
+                    class="btn-warning btn-sm"
+                    @click="openStampAdjust(u)"
+                  >
+                    <Icon name="minus" :size="14" />Stamp
+                  </button>
+                  <button
                     v-if="rewardsAvailable(u.loyaltyStamps) > 0"
                     class="btn-success btn-sm"
                     @click="redeemReward(u)"
@@ -404,6 +450,13 @@ onUnmounted(() => {
           <button class="btn-primary btn-sm" @click="openTopup(u)"><Icon name="plus" :size="14" />Time</button>
           <button class="btn-warning btn-sm" @click="openAdjust(u)"><Icon name="minus" :size="14" />Time</button>
           <button
+            v-if="u.loyaltyStamps > 0"
+            class="btn-warning btn-sm"
+            @click="openStampAdjust(u)"
+          >
+            <Icon name="minus" :size="14" />Stamp
+          </button>
+          <button
             v-if="rewardsAvailable(u.loyaltyStamps) > 0"
             class="btn-success btn-sm"
             @click="redeemReward(u)"
@@ -426,6 +479,7 @@ onUnmounted(() => {
       <h3 v-if="mode === 'create'">New user</h3>
       <h3 v-else-if="mode === 'edit'">Edit {{ form.username }}</h3>
       <h3 v-else-if="mode === 'adjust'">Remove time — {{ form.username }}</h3>
+      <h3 v-else-if="mode === 'stampAdjust'">Remove stamps — {{ form.username }}</h3>
       <h3 v-else>Add time — {{ form.username }}</h3>
 
       <template v-if="mode === 'create' || mode === 'edit'">
@@ -515,18 +569,41 @@ onUnmounted(() => {
         </label>
       </template>
 
+      <template v-else-if="mode === 'stampAdjust'">
+        <p class="muted" style="margin-top: -8px">
+          Correct a mistaken stamp earn. This only lowers the stamp count — it does not remove play
+          time. Use <strong>Redeem</strong> to convert stamps into free hours.
+        </p>
+        <label class="field">
+          <span>Stamps to remove</span>
+          <input v-model.number="form.stampsRemoved" type="number" min="1" />
+        </label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+          <button class="btn-ghost btn-sm" @click="form.stampsRemoved = 1">1</button>
+          <button class="btn-ghost btn-sm" @click="form.stampsRemoved = 2">2</button>
+          <button class="btn-ghost btn-sm" @click="form.stampsRemoved = 3">3</button>
+          <button class="btn-ghost btn-sm" @click="form.stampsRemoved = 5">5</button>
+        </div>
+        <label class="field">
+          <span>Reason (optional)</span>
+          <input v-model="form.stampAdjustReason" placeholder="e.g. wrong top-up amount" />
+        </label>
+      </template>
+
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
 
       <div class="modal-actions">
         <button class="btn-ghost" @click="mode = null"><Icon name="x" />Cancel</button>
         <button class="btn-primary" :disabled="saving" @click="submit">
-          <Icon :name="mode === 'adjust' ? 'minus' : 'check'" />
+          <Icon :name="mode === 'adjust' || mode === 'stampAdjust' ? 'minus' : 'check'" />
           {{
             saving
               ? 'Saving…'
               : mode === 'adjust'
                 ? 'Remove time'
-                : 'Save'
+                : mode === 'stampAdjust'
+                  ? 'Remove stamps'
+                  : 'Save'
           }}
         </button>
       </div>

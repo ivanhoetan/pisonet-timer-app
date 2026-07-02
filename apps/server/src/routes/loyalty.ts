@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   redeemLoyaltySchema,
+  adjustStampsSchema,
   STAMPS_PER_REWARD,
   REWARD_MINUTES,
   rewardsAvailable,
@@ -84,6 +85,70 @@ loyaltyRouter.post(
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Failed to redeem loyalty reward' });
+    }
+  }
+);
+
+// Manually remove stamps (e.g. mistaken earn or staff correction). Does not
+// grant or remove play time — use redeem for converting stamps to free hours.
+loyaltyRouter.post(
+  '/adjust-stamps',
+  authMiddleware,
+  adminMiddleware,
+  validateBody(adjustStampsSchema),
+  async (req: AuthRequest, res) => {
+    try {
+      const { userId, stampsRemoved, reason } = req.body as {
+        userId: string;
+        stampsRemoved: number;
+        reason?: string;
+      };
+
+      const user = await User.findById(userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      if (stampsRemoved > user.loyaltyStamps) {
+        res.status(400).json({
+          error:
+            user.loyaltyStamps > 0
+              ? `User only has ${user.loyaltyStamps} stamp(s) — cannot remove ${stampsRemoved}`
+              : 'User has no stamps to remove',
+        });
+        return;
+      }
+
+      user.loyaltyStamps -= stampsRemoved;
+      await user.save();
+
+      const transaction = await Transaction.create({
+        userId,
+        minutesAdded: 0,
+        amountPaid: 0,
+        paymentMethod: 'stamp_adjustment',
+        paymentReference:
+          reason?.trim() || `Removed ${stampsRemoved} stamp(s)`,
+        createdBy: req.auth!.sub,
+      });
+
+      recordAudit(req, {
+        action: 'stamp_adjust',
+        targetType: 'user',
+        targetId: userId,
+        targetLabel: user.username,
+        details: `-${stampsRemoved} stamp(s)${reason?.trim() ? ` (${reason.trim()})` : ''}`,
+      });
+
+      res.status(201).json({
+        transaction,
+        loyaltyStamps: user.loyaltyStamps,
+        stampsRemoved,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to adjust stamps' });
     }
   }
 );

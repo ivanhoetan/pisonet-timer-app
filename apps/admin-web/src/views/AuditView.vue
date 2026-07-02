@@ -17,6 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
   topup: 'Top-up',
   time_adjust: 'Time removed',
   loyalty_redeem: 'Loyalty redeemed',
+  stamp_adjust: 'Stamps removed',
   user_create: 'User created',
   user_update: 'User updated',
   user_password_reset: 'Password reset',
