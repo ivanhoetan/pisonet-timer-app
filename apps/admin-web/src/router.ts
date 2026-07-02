@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import { isAuthenticated } from './lib/auth';
 import LoginView from './views/LoginView.vue';
 import DashboardView from './views/DashboardView.vue';
+import FloorView from './views/FloorView.vue';
 import UsersView from './views/UsersView.vue';
 import ComputersView from './views/ComputersView.vue';
 import TransactionsView from './views/TransactionsView.vue';
@@ -15,6 +16,7 @@ const router = createRouter({
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/', name: 'dashboard', component: DashboardView },
+    { path: '/floor', name: 'floor', component: FloorView },
     { path: '/users', name: 'users', component: UsersView },
     { path: '/computers', name: 'computers', component: ComputersView },
     { path: '/transactions', name: 'transactions', component: TransactionsView },

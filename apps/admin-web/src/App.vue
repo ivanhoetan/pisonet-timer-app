@@ -22,6 +22,7 @@ const showShell = computed(() => route.name !== 'login' && Boolean(auth.token));
 
 const links = [
   { name: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { name: 'floor', label: 'Floor map', icon: 'floor' },
   { name: 'users', label: 'Users', icon: 'users' },
   { name: 'computers', label: 'Computers', icon: 'computers' },
   { name: 'transactions', label: 'Transactions', icon: 'transactions' },
