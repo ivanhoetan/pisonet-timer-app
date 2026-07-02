@@ -13,6 +13,14 @@ import {
 } from './lib/api';
 import { socketClient } from './lib/socket';
 import { formatTime } from './lib/time';
+import {
+  lowTimeLevel,
+  lowTimeMessage,
+  LOW_TIME_WARN_1_MIN,
+  LOW_TIME_WARN_5_MIN,
+  playWarningTone,
+  type LowTimeLevel,
+} from './lib/timeWarnings';
 
 type Screen = 'loading' | 'pairing' | 'lock' | 'register' | 'session' | 'expired' | 'maintenance';
 
@@ -94,6 +102,23 @@ let removeTrayLogout: (() => void) | undefined;
 
 const displayTime = computed(() => formatTime(remainingSeconds.value));
 const idleDisplay = computed(() => formatTime(idleSecondsLeft.value));
+
+const sessionTimeWarning = computed((): LowTimeLevel => {
+  if (screen.value !== 'session') return 'none';
+  return lowTimeLevel(remainingSeconds.value);
+});
+
+const sessionTimeWarningMessage = computed(() => lowTimeMessage(sessionTimeWarning.value));
+
+watch(remainingSeconds, (next, prev) => {
+  if (screen.value !== 'session' || next <= 0) return;
+  if (prev > LOW_TIME_WARN_5_MIN && next <= LOW_TIME_WARN_5_MIN) {
+    playWarningTone('5min');
+  }
+  if (prev > LOW_TIME_WARN_1_MIN && next <= LOW_TIME_WARN_1_MIN) {
+    playWarningTone('1min');
+  }
+});
 
 function triggerShutdown() {
   cancelIdleCountdown();
@@ -765,7 +790,15 @@ onUnmounted(() => {
 
     <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC.
          Fixed to fill the whole tiny window so the frameless content never shows scrollbars. -->
-    <div v-if="screen === 'session' && minimized" class="mini-timer" title="Drag to move">
+    <div
+      v-if="screen === 'session' && minimized"
+      class="mini-timer"
+      :class="{
+        'mini-timer--warn-5': sessionTimeWarning === '5min',
+        'mini-timer--warn-1': sessionTimeWarning === '1min',
+      }"
+      title="Drag to move"
+    >
       <span class="mini-time">{{ displayTime }}</span>
       <div class="mini-buttons">
         <button class="mini-btn" title="Maximize" @click="restoreFromMini">⤢</button>
@@ -777,7 +810,25 @@ onUnmounted(() => {
 
     <div v-else-if="screen === 'session'" class="card session-card">
       <p class="muted">Logged in as {{ username }}</p>
-      <div class="timer-display">{{ displayTime }}</div>
+
+      <div
+        v-if="sessionTimeWarning !== 'none'"
+        class="time-warn-banner"
+        :class="sessionTimeWarning === '1min' ? 'time-warn-banner--critical' : ''"
+        role="alert"
+      >
+        {{ sessionTimeWarningMessage }}
+      </div>
+
+      <div
+        class="timer-display"
+        :class="{
+          'timer-display--warn-5': sessionTimeWarning === '5min',
+          'timer-display--warn-1': sessionTimeWarning === '1min',
+        }"
+      >
+        {{ displayTime }}
+      </div>
       <p class="muted">Time remaining</p>
 
       <div class="loyalty-box">
@@ -923,6 +974,44 @@ onUnmounted(() => {
 .session-card {
   text-align: center;
   width: min(520px, 90vw);
+}
+
+.time-warn-banner {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.time-warn-banner--critical {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fca5a5;
+  animation: warn-pulse 1s ease-in-out infinite;
+}
+
+.timer-display--warn-5 {
+  color: #fbbf24;
+}
+
+.timer-display--warn-1 {
+  color: #f87171;
+  animation: warn-pulse 1s ease-in-out infinite;
+}
+
+@keyframes warn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 h1 {
@@ -1133,6 +1222,25 @@ h1 {
   user-select: none;
   cursor: move;
   -webkit-app-region: drag;
+}
+
+.mini-timer--warn-5 {
+  border-color: #b45309;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
+}
+
+.mini-timer--warn-5 .mini-time {
+  color: #fbbf24;
+}
+
+.mini-timer--warn-1 {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.45);
+  animation: warn-pulse 1s ease-in-out infinite;
+}
+
+.mini-timer--warn-1 .mini-time {
+  color: #f87171;
 }
 
 .mini-time {
