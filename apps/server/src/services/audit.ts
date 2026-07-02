@@ -27,3 +27,20 @@ export function recordAudit(req: AuthRequest, input: AuditInput): void {
     console.error('Failed to write audit log', err);
   });
 }
+
+// For unauthenticated events (e.g. failed customer/admin login).
+export function recordSystemAudit(
+  input: AuditInput & { actorEmail: string; actorId?: string }
+): void {
+  AuditLog.create({
+    actorId: input.actorId ? new Types.ObjectId(input.actorId) : undefined,
+    actorEmail: input.actorEmail,
+    action: input.action,
+    targetType: input.targetType,
+    targetId: input.targetId,
+    targetLabel: input.targetLabel,
+    details: input.details,
+  }).catch((err) => {
+    console.error('Failed to write audit log', err);
+  });
+}

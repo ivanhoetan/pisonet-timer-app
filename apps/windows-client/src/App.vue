@@ -49,6 +49,7 @@ const loginForm = ref({ username: '', password: '' });
 const lastCredentials = ref({ username: '' });
 const loginError = ref('');
 const loggingIn = ref(false);
+const loginStatus = ref<'idle' | 'waking' | 'signing-in'>('idle');
 
 // Customer self-registration (from the lock screen).
 const registerForm = ref({
@@ -330,18 +331,34 @@ async function savePairing() {
 async function handleLogin() {
   if (!config.value || loggingIn.value) return;
 
+  const loginUsername = loginForm.value.username.trim();
+  const password = loginForm.value.password;
+
   loginError.value = '';
+
+  if (!loginUsername) {
+    loginError.value = 'Username is required';
+    return;
+  }
+  if (!password) {
+    loginError.value = 'Password is required';
+    return;
+  }
+
   loggingIn.value = true;
+  loginStatus.value = 'waking';
 
   try {
+    await warmUpServer(config.value.serverUrl);
+    loginStatus.value = 'signing-in';
     const result = await passwordLogin(
       config.value.serverUrl,
-      loginForm.value.username.trim(),
-      loginForm.value.password,
+      loginUsername,
+      password,
       config.value.computerId
     );
 
-    lastCredentials.value = { username: loginForm.value.username.trim() };
+    lastCredentials.value = { username: loginUsername };
 
     sessionId.value = result.sessionId;
     sessionToken.value = result.token;
@@ -355,6 +372,7 @@ async function handleLogin() {
     loginError.value = err instanceof Error ? err.message : 'Login failed';
   } finally {
     loggingIn.value = false;
+    loginStatus.value = 'idle';
   }
 }
 
@@ -582,7 +600,14 @@ onUnmounted(() => {
 <template>
   <div class="center-screen">
     <div
-      v-if="connecting && screen !== 'pairing' && screen !== 'maintenance' && !minimized"
+      v-if="
+        connecting &&
+        screen !== 'pairing' &&
+        screen !== 'maintenance' &&
+        screen !== 'lock' &&
+        screen !== 'register' &&
+        !minimized
+      "
       class="overlay"
     >
       <div class="card">
@@ -654,7 +679,11 @@ onUnmounted(() => {
       <p class="muted">
         {{ config?.computerCode || 'Computer' }}
         <span v-if="connected"> · online</span>
+        <span v-else-if="connecting"> · reconnecting…</span>
         <span v-else> · offline</span>
+      </p>
+      <p v-if="connecting && !connected" class="reconnect-hint">
+        Server link is catching up — you can still try to log in.
       </p>
 
       <label class="field">
@@ -677,17 +706,17 @@ onUnmounted(() => {
         />
       </label>
 
-      <button class="primary" :disabled="!connected || loggingIn" @click="handleLogin">
+      <button class="primary" :disabled="loggingIn" @click="handleLogin">
         <span v-if="loggingIn" class="btn-loading">
           <span class="spinner" aria-hidden="true"></span>
-          Logging in…
+          {{ loginStatus === 'waking' ? 'Waking server…' : 'Logging in…' }}
         </span>
         <span v-else>Start session</span>
       </button>
       <p v-if="loginError" class="error">{{ loginError }}</p>
 
       <div class="lock-divider"><span>new here?</span></div>
-      <button class="secondary" :disabled="!connected || loggingIn" @click="openRegister">
+      <button class="secondary" :disabled="loggingIn" @click="openRegister">
         Create an account
       </button>
 
@@ -697,6 +726,9 @@ onUnmounted(() => {
     <div v-else-if="screen === 'register'" class="card">
       <h1>Create account</h1>
       <p class="muted">Register a new player account. Staff will load your time after payment.</p>
+      <p v-if="connecting && !connected" class="reconnect-hint">
+        Server link is catching up — registration may take a moment.
+      </p>
 
       <label class="field">
         <span>Username (3–32 letters, numbers, _)</span>
@@ -905,6 +937,12 @@ h1 {
 .idle-hint {
   font-size: 13px;
   margin-top: 16px;
+  color: #f59e0b;
+}
+
+.reconnect-hint {
+  font-size: 13px;
+  margin: -4px 0 12px;
   color: #f59e0b;
 }
 

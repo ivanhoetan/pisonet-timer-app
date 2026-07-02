@@ -1,5 +1,4 @@
-import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import { Router, type Response } from 'express';
 import {
   registerSchema,
   loginSchema,
@@ -17,14 +16,80 @@ import { signToken } from '../utils/jwt';
 import { validateBody } from '../middleware/validate';
 import { sessionEngine } from '../services/sessionEngine';
 import { authMiddleware, userMiddleware, type AuthRequest } from '../middleware/auth';
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many login attempts' },
-});
+import { recordSystemAudit } from '../services/audit';
+import {
+  adminAccountKey,
+  clearLoginLockout,
+  getLoginLockout,
+  lockoutMessage,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  recordFailedLogin,
+  userAccountKey,
+} from '../services/loginLockout';
 
 export const authRouter = Router();
+
+async function isUserLocked(username: string, res: Response): Promise<boolean> {
+  const status = await getLoginLockout(userAccountKey(username));
+  if (status.locked) {
+    res.status(429).json({ error: lockoutMessage(status.retryAfterMs) });
+    return true;
+  }
+  return false;
+}
+
+async function isAdminLocked(email: string, res: Response): Promise<boolean> {
+  const status = await getLoginLockout(adminAccountKey(email));
+  if (status.locked) {
+    res.status(429).json({ error: lockoutMessage(status.retryAfterMs) });
+    return true;
+  }
+  return false;
+}
+
+async function rejectUserLogin(
+  username: string,
+  res: Response,
+  details?: string
+): Promise<void> {
+  const result = await recordFailedLogin(userAccountKey(username));
+  recordSystemAudit({
+    actorEmail: username,
+    action: 'login_failed',
+    targetType: 'user',
+    targetLabel: username,
+    details:
+      details ||
+      `Wrong password (${result.attempts}/${MAX_FAILED_LOGIN_ATTEMPTS} attempts)`,
+  });
+  if (result.locked) {
+    res.status(429).json({ error: lockoutMessage(result.retryAfterMs) });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+}
+
+async function rejectAdminLogin(
+  email: string,
+  res: Response,
+  details?: string
+): Promise<void> {
+  const result = await recordFailedLogin(adminAccountKey(email));
+  recordSystemAudit({
+    actorEmail: email,
+    action: 'login_failed',
+    targetType: 'admin',
+    targetLabel: email,
+    details:
+      details ||
+      `Wrong password (${result.attempts}/${MAX_FAILED_LOGIN_ATTEMPTS} attempts)`,
+  });
+  if (result.locked) {
+    res.status(429).json({ error: lockoutMessage(result.retryAfterMs) });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+}
 
 authRouter.post('/register', validateBody(registerSchema), async (req, res) => {
   try {
@@ -61,21 +126,27 @@ authRouter.post('/register', validateBody(registerSchema), async (req, res) => {
   }
 });
 
-authRouter.post('/login', loginLimiter, validateBody(loginSchema), async (req, res) => {
+authRouter.post('/login', validateBody(loginSchema), async (req, res) => {
   try {
     const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    const trimmed = username.trim();
+
+    if (await isUserLocked(trimmed, res)) return;
+
+    const user = await User.findOne({ username: trimmed });
 
     if (!user || user.status !== 'active') {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectUserLogin(trimmed, res);
       return;
     }
 
     const valid = await compareSecret(password, user.passwordHash);
     if (!valid) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectUserLogin(trimmed, res);
       return;
     }
+
+    await clearLoginLockout(userAccountKey(trimmed));
 
     const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
 
@@ -93,19 +164,22 @@ authRouter.post('/login', loginLimiter, validateBody(loginSchema), async (req, r
   }
 });
 
-authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async (req, res) => {
+authRouter.post('/pin-login', validateBody(pinLoginSchema), async (req, res) => {
+  const trimmed = String(req.body.username ?? '').trim();
   try {
-    const { username, pin, computerId } = req.body;
+    const { pin, computerId } = req.body;
 
-    const user = await User.findOne({ username });
+    if (await isUserLocked(trimmed, res)) return;
+
+    const user = await User.findOne({ username: trimmed });
     if (!user || user.status !== 'active' || !user.pinHash) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectUserLogin(trimmed, res, 'Wrong PIN');
       return;
     }
 
     const validPin = await compareSecret(pin, user.pinHash);
     if (!validPin) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectUserLogin(trimmed, res, 'Wrong PIN');
       return;
     }
 
@@ -116,6 +190,7 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
     }
 
     if (user.balanceSeconds <= 0) {
+      await clearLoginLockout(userAccountKey(trimmed));
       res.status(402).json({ error: 'Insufficient balance' });
       return;
     }
@@ -127,6 +202,8 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
       balanceSeconds: user.balanceSeconds,
       loyaltyStamps: user.loyaltyStamps,
     });
+
+    await clearLoginLockout(userAccountKey(trimmed));
 
     const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
 
@@ -140,68 +217,75 @@ authRouter.post('/pin-login', loginLimiter, validateBody(pinLoginSchema), async 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed';
     const status = message.includes('already') || message.includes('in use') ? 409 : 400;
+    if (status === 409) {
+      await clearLoginLockout(userAccountKey(trimmed));
+    }
     res.status(status).json({ error: message });
   }
 });
 
 // Password-based session login for the kiosk. Stronger than the 4–6 digit PIN.
-authRouter.post(
-  '/password-login',
-  loginLimiter,
-  validateBody(passwordLoginSchema),
-  async (req, res) => {
-    try {
-      const { username, password, computerId } = req.body;
+authRouter.post('/password-login', validateBody(passwordLoginSchema), async (req, res) => {
+  const trimmed = String(req.body.username ?? '').trim();
+  try {
+    const { password, computerId } = req.body;
 
-      const user = await User.findOne({ username });
-      if (!user || user.status !== 'active') {
-        res.status(401).json({ error: 'Invalid credentials' });
-        return;
-      }
+    if (await isUserLocked(trimmed, res)) return;
 
-      const validPassword = await compareSecret(password, user.passwordHash);
-      if (!validPassword) {
-        res.status(401).json({ error: 'Invalid credentials' });
-        return;
-      }
-
-      const computer = await Computer.findById(computerId);
-      if (!computer) {
-        res.status(404).json({ error: 'Computer not found' });
-        return;
-      }
-
-      if (user.balanceSeconds <= 0) {
-        res.status(402).json({ error: 'Insufficient balance' });
-        return;
-      }
-
-      const { session, remainingSeconds } = await sessionEngine.startSession({
-        userId: user._id.toString(),
-        username: user.username,
-        computerId,
-        balanceSeconds: user.balanceSeconds,
-        loyaltyStamps: user.loyaltyStamps,
-      });
-
-      const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
-
-      res.json({
-        token,
-        sessionId: session._id,
-        remainingSeconds,
-        username: user.username,
-        loyaltyStamps: user.loyaltyStamps,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed';
-      const status = message.includes('already') || message.includes('in use') ? 409 : 400;
-      res.status(status).json({ error: message });
+    const user = await User.findOne({ username: trimmed });
+    if (!user || user.status !== 'active') {
+      await rejectUserLogin(trimmed, res);
+      return;
     }
-  }
-);
 
-authRouter.post('/pin-logout', loginLimiter, validateBody(pinLogoutSchema), async (req, res) => {
+    const validPassword = await compareSecret(password, user.passwordHash);
+    if (!validPassword) {
+      await rejectUserLogin(trimmed, res);
+      return;
+    }
+
+    const computer = await Computer.findById(computerId);
+    if (!computer) {
+      res.status(404).json({ error: 'Computer not found' });
+      return;
+    }
+
+    if (user.balanceSeconds <= 0) {
+      await clearLoginLockout(userAccountKey(trimmed));
+      res.status(402).json({ error: 'Insufficient balance' });
+      return;
+    }
+
+    const { session, remainingSeconds } = await sessionEngine.startSession({
+      userId: user._id.toString(),
+      username: user.username,
+      computerId,
+      balanceSeconds: user.balanceSeconds,
+      loyaltyStamps: user.loyaltyStamps,
+    });
+
+    await clearLoginLockout(userAccountKey(trimmed));
+
+    const token = signToken({ sub: user._id.toString(), role: 'user', username: user.username });
+
+    res.json({
+      token,
+      sessionId: session._id,
+      remainingSeconds,
+      username: user.username,
+      loyaltyStamps: user.loyaltyStamps,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Login failed';
+    const status = message.includes('already') || message.includes('in use') ? 409 : 400;
+    if (status === 409) {
+      await clearLoginLockout(userAccountKey(trimmed));
+    }
+    res.status(status).json({ error: message });
+  }
+});
+
+authRouter.post('/pin-logout', validateBody(pinLogoutSchema), async (req, res) => {
   try {
     const { username, pin, computerId } = req.body;
 
@@ -262,21 +346,34 @@ authRouter.post(
   }
 );
 
-authRouter.post('/admin/login', loginLimiter, validateBody(adminLoginSchema), async (req, res) => {
+authRouter.post('/admin/login', validateBody(adminLoginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
-    const admin = await Admin.findOne({ email });
+    const trimmed = email.trim().toLowerCase();
+
+    if (await isAdminLocked(trimmed, res)) return;
+
+    const admin = await Admin.findOne({
+      email: {
+        $regex: new RegExp(
+          `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+          'i'
+        ),
+      },
+    });
 
     if (!admin) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectAdminLogin(trimmed, res);
       return;
     }
 
     const valid = await compareSecret(password, admin.passwordHash);
     if (!valid) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      await rejectAdminLogin(trimmed, res);
       return;
     }
+
+    await clearLoginLockout(adminAccountKey(trimmed));
 
     const token = signToken({ sub: admin._id.toString(), role: 'admin', email: admin.email });
 
