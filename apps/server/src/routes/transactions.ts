@@ -4,6 +4,7 @@ import {
   createTransactionSchema,
   pesosToMinutes,
   PESOS_PER_STAMP,
+  transferTimeSchema,
 } from '@pisonet/shared';
 import { Transaction } from '../models/Transaction';
 import { User } from '../models/User';
@@ -172,6 +173,128 @@ transactionsRouter.post(
   }
 );
 
+transactionsRouter.post(
+  '/transfer',
+  authMiddleware,
+  adminMiddleware,
+  validateBody(transferTimeSchema),
+  async (req: AuthRequest, res) => {
+    try {
+      const { fromUserId, toUserId, minutes, reason } = req.body;
+
+      if (fromUserId === toUserId) {
+        res.status(400).json({ error: 'Cannot transfer time to the same user' });
+        return;
+      }
+
+      const secondsToTransfer = minutes * 60;
+
+      const [fromUser, toUser] = await Promise.all([
+        User.findById(fromUserId),
+        User.findById(toUserId),
+      ]);
+
+      if (!fromUser) {
+        res.status(404).json({ error: 'Source user not found' });
+        return;
+      }
+      if (!toUser) {
+        res.status(404).json({ error: 'Destination user not found' });
+        return;
+      }
+      if (toUser.status !== 'active') {
+        res.status(400).json({ error: 'Destination user is disabled' });
+        return;
+      }
+
+      const fromActive = sessionEngine.getByUserId(fromUserId);
+      let fromNewBalance: number;
+
+      if (fromActive) {
+        const available = sessionEngine.getRemainingSeconds(fromActive);
+        if (secondsToTransfer > available) {
+          const maxMinutes = Math.floor(available / 60);
+          res.status(400).json({
+            error:
+              maxMinutes > 0
+                ? `Source user is online — can transfer at most ${maxMinutes} minute(s) right now`
+                : 'Source user has no remaining session time to transfer',
+          });
+          return;
+        }
+        fromNewBalance = await sessionEngine.subtractTime(fromActive.sessionId, secondsToTransfer);
+        fromUser.balanceSeconds = fromNewBalance;
+      } else {
+        if (secondsToTransfer > fromUser.balanceSeconds) {
+          const maxMinutes = Math.floor(fromUser.balanceSeconds / 60);
+          res.status(400).json({
+            error:
+              maxMinutes > 0
+                ? `Insufficient balance — can transfer at most ${maxMinutes} minute(s)`
+                : 'Source user has no time to transfer',
+          });
+          return;
+        }
+        fromUser.balanceSeconds -= secondsToTransfer;
+        fromNewBalance = fromUser.balanceSeconds;
+      }
+
+      toUser.balanceSeconds += secondsToTransfer;
+      const toNewBalance = toUser.balanceSeconds;
+
+      await Promise.all([fromUser.save(), toUser.save()]);
+
+      const refSuffix = reason?.trim() ? ` — ${reason.trim()}` : '';
+      const outRef = `To ${toUser.username}${refSuffix}`;
+      const inRef = `From ${fromUser.username}${refSuffix}`;
+
+      const [outTransaction, inTransaction] = await Promise.all([
+        Transaction.create({
+          userId: fromUserId,
+          minutesAdded: -minutes,
+          amountPaid: 0,
+          paymentMethod: 'transfer',
+          paymentReference: outRef,
+          createdBy: req.auth!.sub,
+        }),
+        Transaction.create({
+          userId: toUserId,
+          minutesAdded: minutes,
+          amountPaid: 0,
+          paymentMethod: 'transfer',
+          paymentReference: inRef,
+          createdBy: req.auth!.sub,
+        }),
+      ]);
+
+      const toActive = sessionEngine.getByUserId(toUserId);
+      if (toActive) {
+        await sessionEngine.addTime(toActive.sessionId, secondsToTransfer);
+      }
+
+      recordAudit(req, {
+        action: 'time_transfer',
+        targetType: 'user',
+        targetId: fromUserId,
+        targetLabel: fromUser.username,
+        details: `Transferred ${minutes} min to ${toUser.username}${refSuffix}`,
+      });
+
+      res.status(201).json({
+        outTransaction,
+        inTransaction,
+        fromNewBalanceSeconds: fromNewBalance,
+        toNewBalanceSeconds: toNewBalance,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to transfer time';
+      const status = message.includes('Cannot remove') ? 400 : 500;
+      if (status === 500) console.error(err);
+      res.status(status).json({ error: message });
+    }
+  }
+);
+
 transactionsRouter.get('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
@@ -180,8 +303,35 @@ transactionsRouter.get('/', authMiddleware, adminMiddleware, async (req, res) =>
       Math.max(5, parseInt(String(req.query.pageSize ?? '25'), 10) || 25)
     );
 
-    const total = await Transaction.countDocuments();
-    const items = await Transaction.find()
+    const filter: Record<string, unknown> = {};
+
+    if (typeof req.query.userId === 'string' && req.query.userId.trim()) {
+      filter.userId = req.query.userId.trim();
+    }
+
+    const start =
+      typeof req.query.start === 'string' ? new Date(req.query.start) : null;
+    const end = typeof req.query.end === 'string' ? new Date(req.query.end) : null;
+
+    if (start && !Number.isNaN(start.getTime())) {
+      filter.createdAt = { ...(filter.createdAt as object), $gte: start };
+    }
+    if (end && !Number.isNaN(end.getTime())) {
+      filter.createdAt = { ...(filter.createdAt as object), $lte: end };
+    }
+    if (
+      start &&
+      end &&
+      !Number.isNaN(start.getTime()) &&
+      !Number.isNaN(end.getTime()) &&
+      start >= end
+    ) {
+      res.status(400).json({ error: 'Invalid start/end range' });
+      return;
+    }
+
+    const total = await Transaction.countDocuments(filter);
+    const items = await Transaction.find(filter)
       .populate('userId', 'username')
       .sort({ createdAt: -1 })
       .skip((page - 1) * pageSize)

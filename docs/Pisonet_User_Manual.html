@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pisonet Timer System — User Manual</title>
+<style>
+  :root {
+    --blue: #2563eb;
+    --dark: #0f172a;
+    --gray: #475569;
+    --light: #f1f5f9;
+    --border: #cbd5e1;
+    --green: #16a34a;
+    --amber: #d97706;
+    --red: #dc2626;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--dark);
+    line-height: 1.6;
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .page {
+    padding: 0 8px;
+  }
+
+  /* ---- Cover ---- */
+  .cover {
+    text-align: center;
+    padding: 90px 20px 40px;
+    page-break-after: always;
+  }
+  .cover .logo {
+    font-size: 64px;
+    margin-bottom: 10px;
+  }
+  .cover h1 {
+    font-size: 38px;
+    margin: 10px 0 6px;
+    color: var(--dark);
+  }
+  .cover h2 {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--gray);
+    margin: 0 0 40px;
+    border: none;
+    padding: 0;
+  }
+  .cover .meta {
+    display: inline-block;
+    text-align: left;
+    background: var(--light);
+    border-radius: 12px;
+    padding: 20px 28px;
+    margin-top: 20px;
+    color: var(--gray);
+    font-size: 14px;
+  }
+  .cover .meta strong { color: var(--dark); }
+
+  .cover .tagline {
+    max-width: 460px;
+    margin: 0 auto 10px;
+    color: var(--gray);
+  }
+
+  h1, h2, h3 { line-height: 1.25; }
+
+  h1.section {
+    font-size: 26px;
+    color: var(--blue);
+    border-bottom: 3px solid var(--blue);
+    padding-bottom: 8px;
+    margin-top: 0;
+    page-break-before: always;
+  }
+
+  h2 {
+    font-size: 19px;
+    margin-top: 28px;
+    color: var(--dark);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 5px;
+  }
+
+  h3 {
+    font-size: 15.5px;
+    margin-top: 20px;
+    margin-bottom: 6px;
+    color: var(--dark);
+  }
+
+  p { margin: 8px 0; }
+
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+
+  strong { color: var(--dark); }
+
+  code {
+    background: var(--light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    color: #be123c;
+  }
+
+  .kbd {
+    display: inline-block;
+    background: #1e293b;
+    color: #fff;
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .step {
+    background: var(--light);
+    border-left: 4px solid var(--blue);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 12px 0;
+  }
+  .step ol { margin: 0; }
+
+  .note, .warn, .tip {
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  .note { background: #eff6ff; border: 1px solid #bfdbfe; }
+  .warn { background: #fef2f2; border: 1px solid #fecaca; }
+  .tip  { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .note::before { content: "ℹ️  "; }
+  .warn::before { content: "⚠️  "; }
+  .tip::before  { content: "✅  "; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 14px 0;
+    font-size: 13px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--dark);
+    color: #fff;
+    font-weight: 600;
+  }
+  tr:nth-child(even) td { background: var(--light); }
+
+  .toc {
+    page-break-after: always;
+  }
+  .toc h1 { color: var(--dark); border-bottom: 3px solid var(--dark); }
+  .toc ol { font-size: 15px; line-height: 2; }
+  .toc .sub { color: var(--gray); font-size: 13.5px; padding-left: 14px; line-height: 1.8; }
+
+  .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    vertical-align: middle;
+  }
+  .pill.blue { background: var(--blue); }
+  .pill.green { background: var(--green); }
+  .pill.amber { background: var(--amber); }
+  .pill.red { background: var(--red); }
+
+  .footer-note {
+    margin-top: 40px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    color: var(--gray);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="logo">⏱️</div>
+  <h1>Pisonet Timer System</h1>
+  <h2>Staff &amp; Admin User Manual</h2>
+  <p class="tagline">A simple, step-by-step guide for running your computer shop —
+  managing customers, time, payments, and the computers themselves.</p>
+  <div class="meta">
+    <div><strong>For:</strong> Shop owners &amp; counter staff</div>
+    <div><strong>Covers:</strong> Admin Portal (phone / computer) &amp; Customer PC App</div>
+    <div><strong>No technical knowledge needed</strong></div>
+  </div>
+</div>
+
+<!-- ============ TABLE OF CONTENTS ============ -->
+<div class="page toc">
+  <h1 class="section" style="page-break-before: avoid;">What's inside</h1>
+  <ol>
+    <li><strong>Getting Started</strong>
+      <div class="sub">What the system is · The two apps · Words you'll see</div>
+    </li>
+    <li><strong>Part A — The Admin Portal</strong>
+      <div class="sub">Opening it · Logging in · Dashboard · Users · Computers ·
+      Transactions · Reports · Loyalty · Audit log · Admins</div>
+    </li>
+    <li><strong>Part B — The Customer PC App</strong>
+      <div class="sub">What customers see · Logging in · Creating an account ·
+      The timer · Minimizing · Logging out · When time runs out</div>
+    </li>
+    <li><strong>Everyday Tasks (Quick Recipes)</strong>
+      <div class="sub">The most common things you'll do each day</div>
+    </li>
+    <li><strong>Loyalty Stamps Explained</strong></li>
+    <li><strong>Setting Up a New Computer</strong></li>
+    <li><strong>Troubleshooting &amp; FAQ</strong></li>
+  </ol>
+
+  <div class="note">This manual was made to be printed. Keep it near the counter so
+  any staff member can follow it.</div>
+</div>
+
+<!-- ============ 1. GETTING STARTED ============ -->
+<div class="page">
+  <h1 class="section">1. Getting Started</h1>
+
+  <h2>What is the Pisonet Timer System?</h2>
+  <p>It is a system that controls how much time each customer can use a computer,
+  based on money they have paid. Time is tied to the <strong>customer's account</strong>,
+  not to a specific computer — so a customer can log in on any PC and use their
+  remaining time.</p>
+
+  <h2>The two apps you will use</h2>
+  <table>
+    <tr><th>App</th><th>Who uses it</th><th>What it's for</th></tr>
+    <tr>
+      <td><strong>Admin Portal</strong></td>
+      <td>You (owner / staff)</td>
+      <td>Open on your <strong>phone or any computer's web browser</strong>.
+      Create customers, add time, see money earned, control the PCs.</td>
+    </tr>
+    <tr>
+      <td><strong>Customer PC App</strong></td>
+      <td>Customers</td>
+      <td>Runs on each <strong>shop computer</strong>. Customers log in here to
+      start their time. It locks the PC when time runs out.</td>
+    </tr>
+  </table>
+
+  <h2>Words you'll see (plain English)</h2>
+  <table>
+    <tr><th>Word</th><th>What it means</th></tr>
+    <tr><td><strong>Balance / Time</strong></td><td>How much computer time a customer has left.</td></tr>
+    <tr><td><strong>Top-up</strong></td><td>Adding time to a customer after they pay.</td></tr>
+    <tr><td><strong>Session</strong></td><td>A customer being logged in and using a PC right now.</td></tr>
+    <tr><td><strong>Stamp</strong></td><td>A loyalty reward. Pay ₱12 in one go = 1 stamp.</td></tr>
+    <tr><td><strong>Online</strong></td><td>The customer is currently logged in and playing.</td></tr>
+    <tr><td><strong>Disabled</strong></td><td>An account that is turned off and cannot log in.</td></tr>
+  </table>
+
+  <div class="tip">The golden rule of pricing: <strong>₱1 = 5 minutes.</strong>
+  So ₱12 = 60 minutes = 1 hour.</div>
+</div>
+
+<!-- ============ 2. ADMIN PORTAL ============ -->
+<div class="page">
+  <h1 class="section">2. Part A — The Admin Portal</h1>
+
+  <h2>Opening the Admin Portal</h2>
+  <div class="step">
+    <ol>
+      <li>On your phone or computer, open a web browser (Chrome, Safari, etc.).</li>
+      <li>Go to this address:<br><code>https://pisonet-timer-api.onrender.com/admin/</code></li>
+      <li>Type your <strong>email</strong> and <strong>password</strong>, then tap <strong>Log in</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="tip"><strong>Make it feel like an app on your phone.</strong>
+  In Chrome (Android): tap the <strong>⋮</strong> menu → <em>Add to Home screen</em>.
+  On iPhone (Safari): tap <strong>Share</strong> → <em>Add to Home Screen</em>.
+  Now it opens with one tap, just like a real app.</div>
+
+  <div class="note">The first time you open it after the shop has been quiet, it may
+  take up to a minute to wake up. This is normal. Just wait — it will load.</div>
+
+  <h2>Finding your way around</h2>
+  <p>On a computer, the menu is on the <strong>left side</strong>. On a phone, tap
+  <span class="kbd">☰ Menu</span> at the top to open it. The menu items are:</p>
+  <table>
+    <tr><th>Menu item</th><th>What you do there</th></tr>
+    <tr><td><strong>Dashboard</strong></td><td>See who's playing right now and today's earnings at a glance.</td></tr>
+    <tr><td><strong>Users</strong></td><td>Create customers, add/remove time, reset passwords, redeem rewards.</td></tr>
+    <tr><td><strong>Computers</strong></td><td>See each PC, lock it, shut it down, or set up a new one.</td></tr>
+    <tr><td><strong>Transactions</strong></td><td>A list of every top-up and time change.</td></tr>
+    <tr><td><strong>Reports</strong></td><td>End-of-day summary you can print or save.</td></tr>
+    <tr><td><strong>Loyalty</strong></td><td>Report of stamps earned and free hours redeemed.</td></tr>
+    <tr><td><strong>Audit log</strong></td><td>A history of staff actions (who did what).</td></tr>
+    <tr><td><strong>Admins</strong></td><td>Add more staff/admin logins.</td></tr>
+  </table>
+</div>
+
+<div class="page">
+  <h2>Dashboard</h2>
+  <p>This is your home screen. It shows:</p>
+  <ul>
+    <li><strong>Active sessions</strong> — how many customers are playing now.</li>
+    <li><strong>Computers in use</strong> and how many are online.</li>
+    <li><strong>Revenue today</strong> — money earned today.</li>
+    <li><strong>A live list</strong> of who is playing, on which PC, and their time left
+    (the timer counts down on screen).</li>
+  </ul>
+  <p>From the live list you can quickly <strong>+ Time</strong> (top-up),
+  <strong>− Time</strong> (remove time), or <strong>Lock</strong> a computer.</p>
+
+  <h2>Users — your customers</h2>
+  <p>This is where you'll spend most of your time. Each customer is one row.</p>
+
+  <h3>Create a new customer</h3>
+  <div class="step">
+    <ol>
+      <li>Tap <strong>New user</strong> (top right).</li>
+      <li>Fill in:
+        <ul>
+          <li><strong>Username</strong> — what they log in with (letters/numbers, no spaces).</li>
+          <li><strong>Nickname</strong> (optional) — a friendly name, e.g. "Juan."</li>
+          <li><strong>Password</strong> — at least 6 characters.</li>
+          <li><strong>PIN</strong> — optional, you can leave it blank.</li>
+          <li><strong>Mobile number</strong> — optional.</li>
+          <li><strong>Starting time</strong> — optional, in minutes.</li>
+        </ul>
+      </li>
+      <li>Tap <strong>Save</strong>.</li>
+    </ol>
+  </div>
+  <div class="tip">Customers can also create their <strong>own</strong> account right on the
+  computer's login screen. You then just add their time after they pay.</div>
+
+  <h3>Add time (top-up) after a customer pays</h3>
+  <div class="step">
+    <ol>
+      <li>Find the customer (use the <strong>Search</strong> box if needed).</li>
+      <li>Tap <strong>+ Time</strong>.</li>
+      <li>Enter how many <strong>pesos</strong> they paid (remember ₱1 = 5 minutes).
+      You can also tap a quick button: ₱1, ₱5, ₱10, <strong>₱12 · 1 stamp</strong>, ₱20, ₱50.</li>
+      <li>Choose the payment method (Cash, GCash, etc.).</li>
+      <li>Tap <strong>Save</strong>.</li>
+    </ol>
+  </div>
+  <div class="note">You can add time even while the customer is <strong>playing</strong> —
+  their on-screen timer goes up immediately.</div>
+
+  <h3>Remove time (fix a mistake)</h3>
+  <p>If you accidentally added too much, tap <strong>− Time</strong>, enter the minutes
+  to remove, and confirm. (Balance never goes below zero.)</p>
+
+  <h3>Reset a forgotten password</h3>
+  <div class="step">
+    <ol>
+      <li>Tap <strong>Reset PW</strong> on the customer's row and confirm.</li>
+      <li>A short <strong>temporary password</strong> appears on screen — give it to the customer.</li>
+      <li>The customer logs in with it, then changes it to their own using
+      <strong>Change password</strong> in the PC app.</li>
+    </ol>
+  </div>
+  <div class="warn">The temporary password is shown <strong>only once</strong>, and the
+  customer's old password stops working. Copy it before closing the box.</div>
+</div>
+
+<div class="page">
+  <h3>Other things on a customer's row</h3>
+  <table>
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td><span class="pill green">+ Time</span></td><td>Add time after payment.</td></tr>
+    <tr><td><span class="pill amber">− Time</span></td><td>Remove time (fix an error).</td></tr>
+    <tr><td><span class="pill blue">Redeem</span></td><td>Trade 5 stamps for 1 free hour (only shows when they have enough).</td></tr>
+    <tr><td>Edit</td><td>Change username, nickname, password, PIN, mobile, or status.</td></tr>
+    <tr><td>Reset PW</td><td>Give a temporary password.</td></tr>
+    <tr><td>Disable / Enable</td><td>Turn an account off or back on.</td></tr>
+  </table>
+
+  <h3>The Balance column (live)</h3>
+  <p>If a customer is <strong>online</strong>, the balance shows a <strong>live countdown</strong>
+  with a green dot — it ticks down as they play. If they are offline, it shows their
+  saved wallet time.</p>
+
+  <h3>Showing or hiding disabled customers</h3>
+  <p>By default the list shows <strong>Active only</strong>. Use the dropdown next to Search
+  to switch to <strong>Disabled only</strong> or <strong>All statuses</strong>.</p>
+
+  <h2>Computers</h2>
+  <p>Each shop PC appears here with a colored status:</p>
+  <table>
+    <tr><th>Status</th><th>Meaning</th></tr>
+    <tr><td><span class="pill green">ONLINE</span></td><td>On and ready, no one logged in.</td></tr>
+    <tr><td><span class="pill blue">IN&nbsp;USE</span></td><td>A customer is playing.</td></tr>
+    <tr><td><span class="pill red">OFFLINE</span></td><td>The PC is off or has no internet.</td></tr>
+    <tr><td><span class="pill amber">MAINTENANCE</span></td><td>Unlocked for repairs (no paid time used).</td></tr>
+  </table>
+  <p>Buttons on each computer:</p>
+  <ul>
+    <li><strong>Pair</strong> — get a code to set up the PC app (see Section 6).</li>
+    <li><strong>Lock</strong> — log out the customer (their time is saved) and lock the PC.</li>
+    <li><strong>Shut down</strong> — turn the PC off remotely.</li>
+    <li><strong>Maintenance</strong> — unlock the PC for cleaning/repairs without using paid time.</li>
+  </ul>
+
+  <h2>Transactions, Reports &amp; Loyalty</h2>
+  <ul>
+    <li><strong>Transactions</strong> — every top-up and time change, with totals.</li>
+    <li><strong>Reports</strong> — pick a date to see that day's money and usage.
+    Tap <strong>Export CSV</strong> (open in Excel) or <strong>Print / Save PDF</strong>.</li>
+    <li><strong>Loyalty</strong> — see stamps earned and free hours given out over a date range.</li>
+  </ul>
+
+  <h2>Audit log &amp; Admins</h2>
+  <ul>
+    <li><strong>Audit log</strong> — shows who did what (top-ups, resets, locks, etc.). Useful
+    for checking staff activity.</li>
+    <li><strong>Admins</strong> — add another staff login. Tap <strong>New admin</strong>, enter
+    an email and password.</li>
+  </ul>
+</div>
+
+<!-- ============ 3. CUSTOMER PC APP ============ -->
+<div class="page">
+  <h1 class="section">3. Part B — The Customer PC App</h1>
+  <p>This app runs on every shop computer. It fills the whole screen and keeps the PC
+  locked until a customer with time logs in.</p>
+
+  <h2>What a customer does to start</h2>
+  <div class="step">
+    <ol>
+      <li>On the locked screen, type <strong>Username</strong> and <strong>Password</strong>.</li>
+      <li>Tap <strong>Start session</strong>.</li>
+      <li>The timer starts and they can use the computer.</li>
+    </ol>
+  </div>
+  <div class="note">A customer needs <strong>time on their account</strong> to log in. If they
+  have ₱0 / 0 minutes, they must pay and get a top-up first.</div>
+
+  <h2>Creating an account at the PC</h2>
+  <p>New customers can tap <strong>Create an account</strong> on the login screen, enter a
+  username, nickname (optional), and password, then tap <strong>Create account</strong>.
+  After that, they pay and you add their time from the Admin Portal.</p>
+
+  <h2>The timer while playing</h2>
+  <ul>
+    <li>The remaining time is shown on screen.</li>
+    <li><strong>Minimize</strong> — shrinks the timer into a small floating clock in the
+    corner so they can use the whole screen. They can drag it around.</li>
+    <li><strong>Logout &amp; save time</strong> — ends the session and <strong>saves</strong> any
+    unused time back to their account for next time.</li>
+    <li><strong>Change password</strong> — lets them set a new password (useful after a reset).</li>
+  </ul>
+
+  <h2>When time runs out</h2>
+  <p>The customer is automatically logged out and the PC locks. Any unused time is already
+  saved. They simply pay for more and log in again.</p>
+
+  <div class="warn">If <strong>no one</strong> is logged in, the PC shows a 60-second countdown and
+  then <strong>shuts down by itself</strong> to save power. This is normal.</div>
+
+  <h2>For staff: opening the PC for repairs</h2>
+  <p>To use a locked computer for cleaning or updates without paying:</p>
+  <div class="step">
+    <ol>
+      <li>Press <span class="kbd">Ctrl + Alt + Shift + M</span> on the keyboard.</li>
+      <li>Type the <strong>maintenance code</strong> you set when the PC was paired.</li>
+    </ol>
+  </div>
+  <p>You can also start/stop maintenance from the Admin Portal → <strong>Computers</strong>.</p>
+</div>
+
+<!-- ============ 4. EVERYDAY TASKS ============ -->
+<div class="page">
+  <h1 class="section">4. Everyday Tasks (Quick Recipes)</h1>
+
+  <h3>💵 A customer pays for time</h3>
+  <div class="step">Admin Portal → <strong>Users</strong> → find them → <strong>+ Time</strong> →
+  enter pesos → <strong>Save</strong>.</div>
+
+  <h3>🆕 A brand-new customer</h3>
+  <div class="step">Easiest: have them tap <strong>Create an account</strong> on the PC.
+  Then Admin Portal → <strong>Users</strong> → <strong>+ Time</strong> after they pay.<br>
+  Or create them yourself with <strong>New user</strong>.</div>
+
+  <h3>🔑 A customer forgot their password</h3>
+  <div class="step">Admin Portal → <strong>Users</strong> → <strong>Reset PW</strong> →
+  give them the temporary password → they log in and set a new one.</div>
+
+  <h3>🎁 A customer wants to use their free hour</h3>
+  <div class="step">Admin Portal → <strong>Users</strong> → if they have 5+ stamps, tap
+  <strong>Redeem</strong> (gives 1 free hour at a time).</div>
+
+  <h3>🔒 Free up or stop a computer</h3>
+  <div class="step">Admin Portal → <strong>Computers</strong> → <strong>Lock</strong>
+  (logs the customer out, saves time) or <strong>Shut down</strong>.</div>
+
+  <h3>📊 Closing the shop / end of day</h3>
+  <div class="step">Admin Portal → <strong>Reports</strong> → pick today → review totals →
+  <strong>Print / Save PDF</strong> for your records.</div>
+
+  <h3>🛠️ Need to fix or clean a PC</h3>
+  <div class="step">At the PC press <span class="kbd">Ctrl + Alt + Shift + M</span> and enter the
+  maintenance code.</div>
+</div>
+
+<!-- ============ 5. LOYALTY ============ -->
+<div class="page">
+  <h1 class="section">5. Loyalty Stamps Explained</h1>
+  <p>The loyalty program rewards regular customers with free time.</p>
+
+  <table>
+    <tr><th>Rule</th><th>Details</th></tr>
+    <tr><td><strong>Earning a stamp</strong></td>
+      <td>A customer earns <strong>1 stamp</strong> for every <strong>₱12 paid in a single top-up</strong>
+      (that's 1 hour). Paying ₱24 at once = 2 stamps.</td></tr>
+    <tr><td><strong>No partial stamps</strong></td>
+      <td>Smaller payments (like ₱6) do <strong>not</strong> build toward a stamp. Only a full ₱12
+      in one payment counts.</td></tr>
+    <tr><td><strong>Redeeming</strong></td>
+      <td><strong>5 stamps = 1 free hour.</strong> You redeem it for them in
+      Admin Portal → Users → <strong>Redeem</strong>.</td></tr>
+    <tr><td><strong>Stacking</strong></td>
+      <td>Free hours can stack. If they have 10 stamps, that's 2 free hours — but you redeem
+      <strong>one hour at a time</strong>.</td></tr>
+    <tr><td><strong>Points</strong></td>
+      <td>Each free hour redeemed also gives the customer <strong>1 point</strong>, a lifetime
+      count of how many free hours they've claimed (handy for monthly bonuses).</td></tr>
+  </table>
+
+  <div class="tip">When taking a ₱12 payment, use the <strong>₱12 · 1 stamp</strong> quick button
+  so the stamp is given correctly.</div>
+
+  <p>Customers can see their current stamps on the computer screen after logging in.</p>
+</div>
+
+<!-- ============ 6. NEW COMPUTER ============ -->
+<div class="page">
+  <h1 class="section">6. Setting Up a New Computer</h1>
+  <p>Do this once per physical PC. It links the computer to your system.</p>
+
+  <h3>Step 1 — Register it (Admin Portal)</h3>
+  <div class="step">
+    <ol>
+      <li>Admin Portal → <strong>Computers</strong> → <strong>Register PC</strong>.</li>
+      <li>Enter a <strong>Computer code</strong> (e.g. <code>PC02</code>) and a display name.</li>
+      <li>Tap <strong>Register</strong>. A short <strong>pairing code</strong> appears
+      (like <code>7K2-Q9F</code>).</li>
+    </ol>
+  </div>
+  <div class="note">The pairing code lasts <strong>15 minutes</strong> and can be used once. If it
+  expires, tap <strong>Pair</strong> on that PC's card for a new one.</div>
+
+  <h3>Step 2 — Enter the code on the PC</h3>
+  <div class="step">
+    <ol>
+      <li>Open the <strong>Pisonet Timer</strong> app on the new PC.</li>
+      <li>On the <strong>Quick pair</strong> tab, the server address is already filled in.</li>
+      <li>Type the <strong>pairing code</strong> and a <strong>maintenance code</strong>
+      (a secret word/number for staff repairs).</li>
+      <li>Tap <strong>Save &amp; connect</strong>.</li>
+    </ol>
+  </div>
+  <p>The PC connects and shows the login screen. It's ready for customers.</p>
+
+  <div class="tip">Repeat for each PC, using a different computer code each time
+  (PC02, PC03, …).</div>
+</div>
+
+<!-- ============ 7. TROUBLESHOOTING ============ -->
+<div class="page">
+  <h1 class="section">7. Troubleshooting &amp; FAQ</h1>
+
+  <table>
+    <tr><th>Problem</th><th>What to do</th></tr>
+    <tr>
+      <td>The Admin Portal is slow or blank when I first open it.</td>
+      <td>The server was asleep. Wait up to a minute — it wakes up and loads automatically.</td>
+    </tr>
+    <tr>
+      <td>A customer can't log in ("Insufficient balance").</td>
+      <td>They have no time. Take payment and add time with <strong>+ Time</strong>.</td>
+    </tr>
+    <tr>
+      <td>A customer says "account already in use."</td>
+      <td>They're still logged in on another PC. Lock that PC (Computers → Lock) or have them
+      log out there first.</td>
+    </tr>
+    <tr>
+      <td>A customer forgot their password.</td>
+      <td>Users → <strong>Reset PW</strong>, give them the temporary password.</td>
+    </tr>
+    <tr>
+      <td>A PC shows <strong>OFFLINE</strong> in the portal.</td>
+      <td>Check that the PC is on and connected to the internet. It comes back automatically.</td>
+    </tr>
+    <tr>
+      <td>I need to use a locked PC for maintenance.</td>
+      <td>Press <span class="kbd">Ctrl + Alt + Shift + M</span> and enter the maintenance code.</td>
+    </tr>
+    <tr>
+      <td>The pairing code didn't work.</td>
+      <td>Codes expire after 15 minutes. Tap <strong>Pair</strong> on the PC's card for a fresh one.</td>
+    </tr>
+    <tr>
+      <td>I added the wrong amount of time.</td>
+      <td>Use <strong>− Time</strong> on the customer's row to remove minutes.</td>
+    </tr>
+    <tr>
+      <td>I can't find a customer in the list.</td>
+      <td>They may be disabled. Change the status dropdown to <strong>All statuses</strong>.</td>
+    </tr>
+    <tr>
+      <td>A PC shut itself down.</td>
+      <td>Normal — an idle PC with no one logged in powers off after 60 seconds. Turn it back on.</td>
+    </tr>
+  </table>
+
+  <h2>Daily checklist</h2>
+  <ul>
+    <li>☐ Open the Admin Portal and check the Dashboard.</li>
+    <li>☐ Make sure all PCs show ONLINE.</li>
+    <li>☐ Take payments → add time promptly.</li>
+    <li>☐ Give stamps using the ₱12 button when relevant.</li>
+    <li>☐ At closing, save the day's Report.</li>
+  </ul>
+
+  <div class="footer-note">
+    Pisonet Timer System — Staff &amp; Admin Manual.<br>
+    Keep this guide at the counter. Pricing: ₱1 = 5 minutes · ₱12 = 1 hour = 1 stamp · 5 stamps = 1 free hour.
+  </div>
+</div>
+
+</body>
+</html>

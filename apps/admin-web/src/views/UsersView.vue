@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { api, ApiError, type AdminUser } from '../lib/api';
+import { api, ApiError, type AdminUser, type Paginated, type Transaction } from '../lib/api';
 import Icon from '../components/Icon.vue';
+import Pagination from '../components/Pagination.vue';
 import {
   formatClock,
+  formatDateTime,
   formatDuration,
+  formatPesos,
+  localDayRange,
   pesosToMinutes,
   rewardsAvailable,
   STAMPS_PER_REWARD,
+  todayDateStr,
 } from '../lib/format';
 
 const users = ref<AdminUser[]>([]);
@@ -17,7 +22,7 @@ const loading = ref(false);
 const error = ref('');
 const toast = ref('');
 
-type Mode = 'create' | 'edit' | 'topup' | 'adjust' | 'stampAdjust' | null;
+type Mode = 'create' | 'edit' | 'topup' | 'adjust' | 'stampAdjust' | 'transfer' | null;
 const mode = ref<Mode>(null);
 const saving = ref(false);
 const formError = ref('');
@@ -38,7 +43,52 @@ const form = ref({
   stampAdjustReason: '',
   paymentMethod: 'manual',
   paymentReference: '',
+  transferToUserId: '',
+  transferMinutes: 10,
+  transferReason: '',
 });
+
+const txModalUser = ref<AdminUser | null>(null);
+const txDate = ref(todayDateStr());
+const txItems = ref<Transaction[]>([]);
+const txLoading = ref(false);
+const txError = ref('');
+const txPage = ref(1);
+const txTotal = ref(0);
+const txPageSize = 25;
+
+const methodLabels: Record<string, string> = {
+  manual: 'Cash / manual',
+  gcash: 'GCash',
+  maya: 'Maya',
+  other: 'Other',
+  adjustment: 'Adjustment',
+  loyalty: 'Loyalty reward',
+  transfer: 'Transfer',
+};
+
+function methodLabel(m: string): string {
+  return methodLabels[m] || m;
+}
+
+function txSummaryAdded(): number {
+  return txItems.value.reduce((sum, t) => sum + (t.minutesAdded > 0 ? t.minutesAdded : 0), 0);
+}
+
+function txSummaryRemoved(): number {
+  return txItems.value.reduce(
+    (sum, t) => sum + (t.minutesAdded < 0 ? Math.abs(t.minutesAdded) : 0),
+    0
+  );
+}
+
+function txSummaryRevenue(): number {
+  return txItems.value.reduce((sum, t) => sum + (t.amountPaid && t.amountPaid > 0 ? t.amountPaid : 0), 0);
+}
+
+function transferTargets(fromId: string): AdminUser[] {
+  return users.value.filter((u) => u.id !== fromId && u.status === 'active');
+}
 
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -101,6 +151,9 @@ function openCreate() {
     stampAdjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
+    transferToUserId: '',
+    transferMinutes: 10,
+    transferReason: '',
   };
   formError.value = '';
   mode.value = 'create';
@@ -123,6 +176,9 @@ function openEdit(u: AdminUser) {
     stampAdjustReason: '',
     paymentMethod: 'manual',
     paymentReference: '',
+    transferToUserId: '',
+    transferMinutes: 10,
+    transferReason: '',
   };
   formError.value = '';
   mode.value = 'edit';
@@ -154,6 +210,55 @@ function openStampAdjust(u: AdminUser) {
   form.value.stampAdjustReason = '';
   formError.value = '';
   mode.value = 'stampAdjust';
+}
+
+function openTransfer(u: AdminUser) {
+  editingId.value = u.id;
+  form.value.username = u.username;
+  form.value.transferMinutes = 10;
+  form.value.transferReason = '';
+  const targets = transferTargets(u.id);
+  form.value.transferToUserId = targets[0]?.id || '';
+  formError.value = '';
+  mode.value = 'transfer';
+}
+
+function openTransactions(u: AdminUser) {
+  txModalUser.value = u;
+  txDate.value = todayDateStr();
+  txPage.value = 1;
+  txError.value = '';
+  void loadUserTransactions();
+}
+
+async function loadUserTransactions() {
+  if (!txModalUser.value) return;
+  txLoading.value = true;
+  txError.value = '';
+  try {
+    const { start, end } = localDayRange(txDate.value);
+    const params = new URLSearchParams({
+      userId: txModalUser.value.id,
+      start,
+      end,
+      page: String(txPage.value),
+      pageSize: String(txPageSize),
+    });
+    const res = await api.get<Paginated<Transaction>>(`/transactions?${params.toString()}`);
+    txItems.value = res.items;
+    txTotal.value = res.total;
+    txPage.value = res.page;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return;
+    txError.value = err instanceof ApiError ? err.message : 'Failed to load transactions';
+  } finally {
+    txLoading.value = false;
+  }
+}
+
+function changeTxPage(p: number) {
+  txPage.value = p;
+  void loadUserTransactions();
 }
 
 async function submit() {
@@ -232,6 +337,31 @@ async function submit() {
         reason: form.value.stampAdjustReason.trim() || undefined,
       });
       showToast(`Removed ${stamps} stamp(s)`);
+    } else if (mode.value === 'transfer') {
+      const minutes = Number(form.value.transferMinutes);
+      if (!minutes || minutes < 1) {
+        formError.value = 'Enter at least 1 minute to transfer';
+        return;
+      }
+      if (!form.value.transferToUserId) {
+        formError.value = 'Choose a user to receive the time';
+        return;
+      }
+      const toUser = users.value.find((u) => u.id === form.value.transferToUserId);
+      if (
+        !confirm(
+          `Transfer ${minutes} minute(s) from ${form.value.username} to ${toUser?.username || 'another user'}?`
+        )
+      ) {
+        return;
+      }
+      await api.post('/transactions/transfer', {
+        fromUserId: editingId.value,
+        toUserId: form.value.transferToUserId,
+        minutes,
+        reason: form.value.transferReason.trim() || undefined,
+      });
+      showToast(`Transferred ${minutes} min to ${toUser?.username || 'user'}`);
     }
     mode.value = null;
     await load();
@@ -393,6 +523,12 @@ onUnmounted(() => {
                   >
                     <Icon name="gift" :size="14" />Redeem
                   </button>
+                  <button class="btn-ghost btn-sm" @click="openTransactions(u)">
+                    <Icon name="transactions" :size="14" />Txns
+                  </button>
+                  <button class="btn-ghost btn-sm" @click="openTransfer(u)">
+                    <Icon name="arrowLeftRight" :size="14" />Transfer
+                  </button>
                   <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
                   <button class="btn-ghost btn-sm" @click="resetPassword(u)"><Icon name="key" :size="14" />Reset PW</button>
                   <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
@@ -463,6 +599,12 @@ onUnmounted(() => {
           >
             <Icon name="gift" :size="14" />Redeem
           </button>
+          <button class="btn-ghost btn-sm" @click="openTransactions(u)">
+            <Icon name="transactions" :size="14" />Txns
+          </button>
+          <button class="btn-ghost btn-sm" @click="openTransfer(u)">
+            <Icon name="arrowLeftRight" :size="14" />Transfer
+          </button>
           <button class="btn-ghost btn-sm" @click="openEdit(u)"><Icon name="edit" :size="14" />Edit</button>
           <button class="btn-ghost btn-sm" @click="resetPassword(u)"><Icon name="key" :size="14" />Reset PW</button>
           <button class="btn-ghost btn-sm" @click="toggleStatus(u)">
@@ -480,6 +622,7 @@ onUnmounted(() => {
       <h3 v-else-if="mode === 'edit'">Edit {{ form.username }}</h3>
       <h3 v-else-if="mode === 'adjust'">Remove time — {{ form.username }}</h3>
       <h3 v-else-if="mode === 'stampAdjust'">Remove stamps — {{ form.username }}</h3>
+      <h3 v-else-if="mode === 'transfer'">Transfer time — {{ form.username }}</h3>
       <h3 v-else>Add time — {{ form.username }}</h3>
 
       <template v-if="mode === 'create' || mode === 'edit'">
@@ -590,6 +733,38 @@ onUnmounted(() => {
         </label>
       </template>
 
+      <template v-else-if="mode === 'transfer'">
+        <p class="muted" style="margin-top: -8px">
+          Move time from this user's wallet (or live session) to another account. Recorded as
+          transfer transactions for both users.
+        </p>
+        <label class="field">
+          <span>Transfer to</span>
+          <select v-model="form.transferToUserId">
+            <option v-if="transferTargets(editingId).length === 0" value="" disabled>
+              No other active users
+            </option>
+            <option v-for="t in transferTargets(editingId)" :key="t.id" :value="t.id">
+              {{ t.username }}{{ t.nickname ? ` (${t.nickname})` : '' }}
+            </option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Minutes to transfer</span>
+          <input v-model.number="form.transferMinutes" type="number" min="1" />
+        </label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+          <button class="btn-ghost btn-sm" @click="form.transferMinutes = 5">5 min</button>
+          <button class="btn-ghost btn-sm" @click="form.transferMinutes = 10">10 min</button>
+          <button class="btn-ghost btn-sm" @click="form.transferMinutes = 30">30 min</button>
+          <button class="btn-ghost btn-sm" @click="form.transferMinutes = 60">60 min</button>
+        </div>
+        <label class="field">
+          <span>Reason (optional)</span>
+          <input v-model="form.transferReason" placeholder="e.g. sibling sharing time" />
+        </label>
+      </template>
+
       <p v-if="formError" class="error" style="margin-bottom: 12px">{{ formError }}</p>
 
       <div class="modal-actions">
@@ -603,9 +778,69 @@ onUnmounted(() => {
                 ? 'Remove time'
                 : mode === 'stampAdjust'
                   ? 'Remove stamps'
-                  : 'Save'
+                  : mode === 'transfer'
+                    ? 'Transfer time'
+                    : 'Save'
           }}
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User transactions modal -->
+  <div v-if="txModalUser" class="modal-backdrop" @click.self="txModalUser = null">
+    <div class="card modal modal-wide">
+      <h3>Transactions — {{ txModalUser.username }}</h3>
+      <div class="tx-toolbar">
+        <label class="field tx-date-field">
+          <span>Day</span>
+          <input v-model="txDate" type="date" @change="txPage = 1; loadUserTransactions()" />
+        </label>
+        <button class="btn-ghost btn-sm" @click="loadUserTransactions">
+          <Icon name="refresh" :size="14" />Refresh
+        </button>
+      </div>
+      <p v-if="txItems.length > 0" class="muted tx-summary">
+        +{{ txSummaryAdded() }} / −{{ txSummaryRemoved() }} min · {{ formatPesos(txSummaryRevenue()) }}
+        <span v-if="txTotal > txItems.length"> · showing {{ txItems.length }} of {{ txTotal }}</span>
+      </p>
+      <p v-if="txError" class="error" style="margin-bottom: 12px">{{ txError }}</p>
+      <p v-if="txLoading" class="muted">Loading…</p>
+      <p v-else-if="txItems.length === 0" class="muted">No transactions for this day.</p>
+      <div v-else class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Minutes</th>
+              <th>Amount</th>
+              <th>Method</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in txItems" :key="t._id">
+              <td>{{ formatDateTime(t.createdAt) }}</td>
+              <td :class="{ 'tx-negative': t.minutesAdded < 0 }">
+                {{ t.minutesAdded > 0 ? `+${t.minutesAdded}` : t.minutesAdded }}
+              </td>
+              <td>{{ t.amountPaid ? formatPesos(t.amountPaid) : '—' }}</td>
+              <td>{{ methodLabel(t.paymentMethod) }}</td>
+              <td>{{ t.paymentReference || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        v-if="txTotal > txPageSize"
+        :page="txPage"
+        :page-size="txPageSize"
+        :total="txTotal"
+        label="transactions"
+        @update:page="changeTxPage"
+      />
+      <div class="modal-actions">
+        <button class="btn-primary" @click="txModalUser = null"><Icon name="check" />Done</button>
       </div>
     </div>
   </div>
@@ -700,5 +935,32 @@ onUnmounted(() => {
   50% {
     opacity: 0.35;
   }
+}
+
+.modal-wide {
+  width: min(640px, 100%);
+}
+
+.tx-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tx-date-field {
+  margin: 0;
+  flex: 1;
+  min-width: 160px;
+}
+
+.tx-summary {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.tx-negative {
+  color: var(--warning);
 }
 </style>

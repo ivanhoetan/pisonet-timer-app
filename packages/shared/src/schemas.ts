@@ -115,6 +115,16 @@ export const adjustTimeSchema = z.object({
   reason: z.string().max(200, 'Reason cannot exceed 200 characters').optional(),
 });
 
+export const transferTimeSchema = z.object({
+  fromUserId: z.string({ required_error: 'Source user is required' }).min(1, 'Source user is required'),
+  toUserId: z.string({ required_error: 'Destination user is required' }).min(1, 'Destination user is required'),
+  minutes: z
+    .number({ required_error: 'Minutes to transfer is required', invalid_type_error: 'Minutes must be a number' })
+    .int('Minutes must be a whole number')
+    .positive('Enter at least 1 minute to transfer'),
+  reason: z.string().max(200, 'Reason cannot exceed 200 characters').optional(),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z
     .string({ required_error: 'Current password is required' })

@@ -22,6 +22,7 @@ const methodLabels: Record<string, string> = {
   other: 'Other',
   adjustment: 'Adjustment',
   loyalty: 'Loyalty reward',
+  transfer: 'Transfer',
 };
 
 function methodLabel(m: string): string {

@@ -185,34 +185,60 @@ onUnmounted(() => {
   <div class="card">
     <h3 style="margin-top: 0">Active sessions</h3>
     <p v-if="live.length === 0" class="muted">No one is logged in right now.</p>
-    <div v-else class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Computer</th>
-            <th>Time left</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in live" :key="s.sessionId">
-            <td>{{ s.username }}</td>
-            <td>{{ s.computerCode }}</td>
-            <td :style="{ color: s.remainingSeconds < 120 ? 'var(--warning)' : 'inherit' }">
+    <template v-else>
+      <div class="sessions-table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Computer</th>
+                <th>Time left</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in live" :key="s.sessionId">
+                <td>{{ s.username }}</td>
+                <td>{{ s.computerCode }}</td>
+                <td :style="{ color: s.remainingSeconds < 120 ? 'var(--warning)' : 'inherit' }">
+                  {{ formatClock(s.remainingSeconds) }}
+                </td>
+                <td>
+                  <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
+                    <button class="btn-ghost btn-sm" @click="openTopup(s)"><Icon name="plus" :size="14" />Time</button>
+                    <button class="btn-warning btn-sm" @click="openAdjust(s)"><Icon name="minus" :size="14" />Time</button>
+                    <button class="btn-danger btn-sm" @click="lockComputer(s)"><Icon name="lock" :size="14" />Lock</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="session-cards">
+        <div v-for="s in live" :key="s.sessionId" class="card session-card">
+          <div class="sc-head">
+            <div>
+              <div class="sc-user">{{ s.username }}</div>
+              <div class="sc-pc">{{ s.computerCode }}</div>
+            </div>
+            <span
+              class="sc-time"
+              :style="{ color: s.remainingSeconds < 120 ? 'var(--warning)' : 'inherit' }"
+            >
               {{ formatClock(s.remainingSeconds) }}
-            </td>
-            <td>
-              <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
-                <button class="btn-ghost btn-sm" @click="openTopup(s)"><Icon name="plus" :size="14" />Time</button>
-                <button class="btn-warning btn-sm" @click="openAdjust(s)"><Icon name="minus" :size="14" />Time</button>
-                <button class="btn-danger btn-sm" @click="lockComputer(s)"><Icon name="lock" :size="14" />Lock</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </span>
+          </div>
+          <div class="sc-actions">
+            <button class="btn-ghost btn-sm" @click="openTopup(s)"><Icon name="plus" :size="14" />Time</button>
+            <button class="btn-warning btn-sm" @click="openAdjust(s)"><Icon name="minus" :size="14" />Time</button>
+            <button class="btn-danger btn-sm" @click="lockComputer(s)"><Icon name="lock" :size="14" />Lock</button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 
   <div v-if="topupFor" class="modal-backdrop" @click.self="topupFor = null">

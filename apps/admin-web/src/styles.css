@@ -499,6 +499,56 @@ th {
   min-width: 80px;
 }
 
+/* ---- Active session cards (mobile dashboard) ---- */
+.sessions-table-card {
+  display: block;
+}
+
+.session-cards {
+  display: none;
+}
+
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-card .sc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-card .sc-user {
+  font-weight: 700;
+  font-size: 18px;
+  word-break: break-all;
+}
+
+.session-card .sc-pc {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.session-card .sc-time {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-card .sc-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-card .sc-actions button {
+  flex: 1;
+  min-width: 90px;
+}
+
 .center-screen {
   display: flex;
   align-items: center;
@@ -573,6 +623,15 @@ th {
     display: none;
   }
   .user-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .sessions-table-card {
+    display: none;
+  }
+  .session-cards {
     display: grid;
     grid-template-columns: 1fr;
     gap: 14px;

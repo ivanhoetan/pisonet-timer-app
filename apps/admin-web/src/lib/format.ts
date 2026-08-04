@@ -48,3 +48,15 @@ export function formatDateTime(value: string | Date): string {
     minute: '2-digit',
   });
 }
+
+export function todayDateStr(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function localDayRange(dateStr: string): { start: string; end: string } {
+  const start = new Date(`${dateStr}T00:00:00`);
+  const end = new Date(`${dateStr}T23:59:59.999`);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
