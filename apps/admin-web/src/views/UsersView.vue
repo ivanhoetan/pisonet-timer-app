@@ -57,6 +57,9 @@ const txPage = ref(1);
 const txTotal = ref(0);
 const txPageSize = 25;
 
+const transferCandidates = ref<AdminUser[]>([]);
+const transferCandidatesLoading = ref(false);
+
 const methodLabels: Record<string, string> = {
   manual: 'Cash / manual',
   gcash: 'GCash',
@@ -87,7 +90,19 @@ function txSummaryRevenue(): number {
 }
 
 function transferTargets(fromId: string): AdminUser[] {
-  return users.value.filter((u) => u.id !== fromId && u.status === 'active');
+  return transferCandidates.value.filter((u) => u.id !== fromId && u.status === 'active');
+}
+
+async function loadTransferCandidates() {
+  transferCandidatesLoading.value = true;
+  try {
+    transferCandidates.value = await api.get<AdminUser[]>('/users?status=active');
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return;
+    transferCandidates.value = users.value.filter((u) => u.status === 'active');
+  } finally {
+    transferCandidatesLoading.value = false;
+  }
 }
 
 let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -217,10 +232,13 @@ function openTransfer(u: AdminUser) {
   form.value.username = u.username;
   form.value.transferMinutes = 10;
   form.value.transferReason = '';
-  const targets = transferTargets(u.id);
-  form.value.transferToUserId = targets[0]?.id || '';
+  form.value.transferToUserId = '';
   formError.value = '';
   mode.value = 'transfer';
+  void loadTransferCandidates().then(() => {
+    const targets = transferTargets(u.id);
+    form.value.transferToUserId = targets[0]?.id || '';
+  });
 }
 
 function openTransactions(u: AdminUser) {
@@ -735,14 +753,16 @@ onUnmounted(() => {
 
       <template v-else-if="mode === 'transfer'">
         <p class="muted" style="margin-top: -8px">
-          Move time from this user's wallet (or live session) to another account. Recorded as
-          transfer transactions for both users.
+          Move time from this account to another <strong>enabled</strong> account. Neither person
+          needs to be logged in on a PC. Source must have enough wallet time (or live session time
+          if online).
         </p>
         <label class="field">
           <span>Transfer to</span>
-          <select v-model="form.transferToUserId">
-            <option v-if="transferTargets(editingId).length === 0" value="" disabled>
-              No other active users
+          <select v-model="form.transferToUserId" :disabled="transferCandidatesLoading">
+            <option v-if="transferCandidatesLoading" value="" disabled>Loading accounts…</option>
+            <option v-else-if="transferTargets(editingId).length === 0" value="" disabled>
+              No other enabled accounts — create or enable another user first
             </option>
             <option v-for="t in transferTargets(editingId)" :key="t.id" :value="t.id">
               {{ t.username }}{{ t.nickname ? ` (${t.nickname})` : '' }}
