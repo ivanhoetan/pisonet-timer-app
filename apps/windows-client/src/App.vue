@@ -169,8 +169,10 @@ watch(
       void window.pisonet?.enterMiniTimer?.();
     } else {
       window.pisonet?.engageLock?.();
-      if (current === 'lock' || current === 'expired') {
-        startIdleCountdown();
+      // Idle auto-shutdown while waiting on login / register / expired screens.
+      // Keep the same countdown when switching between lock ↔ register.
+      if (current === 'lock' || current === 'expired' || current === 'register') {
+        if (!idleTimer) startIdleCountdown();
       } else {
         cancelIdleCountdown();
       }
@@ -786,6 +788,7 @@ onUnmounted(() => {
       <button class="secondary" :disabled="registerSaving" @click="backToLogin">
         Back to login
       </button>
+      <p class="muted idle-hint">PC shuts down in {{ idleDisplay }} if no one logs in.</p>
     </div>
 
     <!-- Sticky mini-timer: small always-on-top, draggable widget while the customer uses the PC.

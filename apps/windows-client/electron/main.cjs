@@ -11,7 +11,7 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const Store = require('electron-store');
 
 const store = new Store();
@@ -23,8 +23,40 @@ let lockdownActive = true;
 let maintenanceActive = false;
 let miniActive = false;
 let preMiniBounds = null;
+// Bumped to cancel in-flight reclaim retries when the lock is released.
+let reclaimGeneration = 0;
+// Low-level keyboard hook process (blocks Alt+Tab / Win while locked).
+let keyboardLockProc = null;
+let keyboardLockStopping = false;
 
 const isDev = !app.isPackaged;
+
+// Processes that must never be force-minimized / killed when reclaiming the
+// display from exclusive-fullscreen games (Valorant, etc.).
+const RECLAIM_PROTECTED_PROCESSES = [
+  'explorer',
+  'dwm',
+  'csrss',
+  'winlogon',
+  'services',
+  'lsass',
+  'svchost',
+  'fontdrvhost',
+  'sihost',
+  'taskhostw',
+  'RuntimeBroker',
+  'SearchHost',
+  'ShellExperienceHost',
+  'StartMenuExperienceHost',
+  'TextInputHost',
+  'ApplicationFrameHost',
+  'SystemSettings',
+  'SecurityHealthSystray',
+  'conhost',
+  'Idle',
+  'System',
+  'Registry',
+];
 
 // Secret combo that opens the maintenance unlock prompt while the PC is locked.
 const MAINTENANCE_SHORTCUT = 'Control+Alt+Shift+M';
@@ -34,18 +66,24 @@ const MAINTENANCE_SHORTCUT = 'Control+Alt+Shift+M';
 const MINI_WIDTH = 210;
 const MINI_HEIGHT = 56;
 
-// Shortcuts to swallow while the PC is locked (no active paid session).
+// Best-effort Electron layer (many of these are ignored by Windows; the
+// WH_KEYBOARD_LL hook in keyboard-lock.ps1 is the reliable blocker).
 const LOCK_SHORTCUTS = [
   'Alt+Tab',
+  'Alt+Shift+Tab',
   'Alt+Escape',
   'Alt+F4',
+  'Alt+Space',
   'Super',
   'Super+D',
   'Super+E',
   'Super+R',
   'Super+Tab',
+  'Super+L',
   'Control+Escape',
+  'Control+Shift+Escape',
   'CommandOrControl+Shift+Escape',
+  'Control+Alt+Tab',
 ];
 
 function getTrayIcon() {
@@ -80,6 +118,64 @@ function unregisterLockShortcuts() {
   }
 }
 
+function stopKeyboardLock() {
+  if (!keyboardLockProc) return;
+  keyboardLockStopping = true;
+  const proc = keyboardLockProc;
+  keyboardLockProc = null;
+  try {
+    proc.kill();
+  } catch {
+    // ignore
+  }
+  if (proc.pid && process.platform === 'win32') {
+    exec(`taskkill /PID ${proc.pid} /T /F`, { windowsHide: true }, () => {
+      keyboardLockStopping = false;
+    });
+  } else {
+    keyboardLockStopping = false;
+  }
+}
+
+/**
+ * Spawn a WH_KEYBOARD_LL hook that eats Alt+Tab / Win / Ctrl+Esc while locked.
+ * Electron globalShortcut alone cannot block these on Windows.
+ */
+function startKeyboardLock() {
+  if (isDev || process.platform !== 'win32') return;
+  if (keyboardLockProc) return;
+
+  const scriptPath = path.join(__dirname, 'keyboard-lock.ps1');
+  if (!fs.existsSync(scriptPath)) {
+    console.error('[lock] keyboard-lock.ps1 missing — Alt+Tab may still work');
+    return;
+  }
+
+  keyboardLockStopping = false;
+  keyboardLockProc = spawn(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath],
+    { windowsHide: true, stdio: 'ignore' }
+  );
+
+  keyboardLockProc.on('error', (err) => {
+    console.error('[lock] keyboard hook failed to start', err);
+    keyboardLockProc = null;
+  });
+
+  keyboardLockProc.on('exit', () => {
+    keyboardLockProc = null;
+    // If the hook dies while still locked, restart it (unless we stopped it).
+    if (!keyboardLockStopping && lockdownActive && !isQuitting) {
+      setTimeout(() => {
+        if (lockdownActive && !isQuitting && !keyboardLockProc) {
+          startKeyboardLock();
+        }
+      }, 400);
+    }
+  });
+}
+
 function promptMaintenance() {
   if (!mainWindow || maintenanceActive) return;
   bringToFront();
@@ -104,10 +200,131 @@ function unregisterMaintenanceShortcut() {
 }
 
 function bringToFront() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
+  if (lockdownActive || miniActive) {
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  }
   mainWindow.focus();
   mainWindow.moveTop();
+}
+
+function collectOurPids() {
+  const pids = new Set([process.pid]);
+  try {
+    for (const metric of app.getAppMetrics()) {
+      pids.add(metric.pid);
+    }
+  } catch {
+    // ignore
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      pids.add(mainWindow.webContents.getOSProcessId());
+    } catch {
+      // ignore
+    }
+  }
+  return [...pids];
+}
+
+/**
+ * Exclusive-fullscreen games (Valorant, etc.) own the GPU swap chain and ignore
+ * Electron always-on-top / focus. When locking, force-minimize other windows
+ * and terminate non-system apps so the login screen can take the display.
+ */
+function reclaimDisplay() {
+  const gen = ++reclaimGeneration;
+  bringToFront();
+
+  if (isDev || process.platform !== 'win32') return;
+
+  const keepPids = collectOurPids();
+  const keepCsv = keepPids.join(',');
+  const protectedCsv = RECLAIM_PROTECTED_PROCESSES.map((n) => `'${n}'`).join(',');
+
+  // C# helper via Add-Type: EnumWindows → SW_FORCEMINIMIZE, then Kill remaining
+  // non-protected processes that still hold a visible titled window / focus.
+  const ps = `
+$ErrorActionPreference = 'SilentlyContinue'
+Add-Type @"
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
+public static class KioskReclaim {
+  public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern int GetWindowTextLength(IntPtr hWnd);
+
+  public static void Run(int[] keepPids, string[] protectedNames) {
+    var keep = new HashSet<int>(keepPids);
+    var protectedSet = new HashSet<string>(protectedNames, StringComparer.OrdinalIgnoreCase);
+    var toKill = new HashSet<int>();
+
+    EnumWindows((hWnd, l) => {
+      if (!IsWindowVisible(hWnd)) return true;
+      if (GetWindowTextLength(hWnd) == 0) return true;
+      uint pid;
+      GetWindowThreadProcessId(hWnd, out pid);
+      int id = (int)pid;
+      if (keep.Contains(id)) return true;
+      ShowWindow(hWnd, 11); // SW_FORCEMINIMIZE
+      try {
+        var name = Process.GetProcessById(id).ProcessName;
+        if (!protectedSet.Contains(name)) toKill.Add(id);
+      } catch {}
+      return true;
+    }, IntPtr.Zero);
+
+    var fg = GetForegroundWindow();
+    if (fg != IntPtr.Zero) {
+      uint pid;
+      GetWindowThreadProcessId(fg, out pid);
+      int id = (int)pid;
+      if (!keep.Contains(id)) {
+        try {
+          var name = Process.GetProcessById(id).ProcessName;
+          if (!protectedSet.Contains(name)) toKill.Add(id);
+        } catch {}
+      }
+    }
+
+    foreach (var id in toKill) {
+      try { Process.GetProcessById(id).Kill(); } catch {}
+    }
+  }
+}
+"@
+[KioskReclaim]::Run(@(${keepCsv}), @(${protectedCsv}))
+`.trim();
+
+  exec(
+    `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ${JSON.stringify(ps)}`,
+    { windowsHide: true, timeout: 15000 },
+    () => {
+      if (gen === reclaimGeneration && lockdownActive) bringToFront();
+    }
+  );
+
+  // Exclusive fullscreen can take a moment to release the display after kill.
+  for (const ms of [150, 400, 800, 1500, 3000]) {
+    setTimeout(() => {
+      if (gen !== reclaimGeneration || !lockdownActive) return;
+      if (!isDev && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setKiosk(true);
+        mainWindow.setFullScreen(true);
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      }
+      bringToFront();
+    }, ms);
+  }
 }
 
 function applyLock() {
@@ -121,17 +338,20 @@ function applyLock() {
     mainWindow.setFullScreen(true);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
   }
-  bringToFront();
+  reclaimDisplay();
   registerLockShortcuts();
+  startKeyboardLock();
   registerMaintenanceShortcut();
 }
 
 function releaseLock() {
   lockdownActive = false;
+  reclaimGeneration += 1;
+  unregisterLockShortcuts();
+  stopKeyboardLock();
+  unregisterMaintenanceShortcut();
   if (!mainWindow) return;
 
-  unregisterLockShortcuts();
-  unregisterMaintenanceShortcut();
   mainWindow.setMinimizable(true);
   if (!isDev) {
     mainWindow.setAlwaysOnTop(false);
@@ -301,11 +521,13 @@ function createWindow() {
     }
   });
 
-  // While locked, refuse to lose foreground.
+  // While locked, refuse to lose foreground and keep the key hook alive.
   mainWindow.on('blur', () => {
     if (!lockdownActive || isDev) return;
     setTimeout(() => {
-      if (lockdownActive) bringToFront();
+      if (!lockdownActive) return;
+      bringToFront();
+      startKeyboardLock();
     }, 80);
   });
 
@@ -413,6 +635,7 @@ app.on('window-all-closed', (e) => {
 app.on('before-quit', () => {
   isQuitting = true;
   unregisterLockShortcuts();
+  stopKeyboardLock();
   if (powerBlocker) {
     powerSaveBlocker.stop(powerBlocker);
   }

@@ -78,7 +78,7 @@ If you ever get locked out or the customer account has no shell:
 
 | Situation                         | App layer (Electron)                         | OS layer (this folder)                    |
 | --------------------------------- | -------------------------------------------- | ----------------------------------------- |
-| No one logged in / time = 0       | Fullscreen lock, blocks shortcuts, no close  | No desktop/taskbar, Task Manager disabled |
-| User logs in with time credits    | Releases lock → free use of the PC           | (no effect during session)                |
-| Time runs out / forced logout     | Re-locks instantly, returns to login screen  | Still no escape to desktop                |
+| No one logged in / time = 0       | Fullscreen lock, blocks Alt+Tab/Win via low-level keyboard hook, no close | No desktop/taskbar, Task Manager disabled |
+| User logs in with time credits    | Releases lock + keyboard hook → free use of the PC | (no effect during session)                |
+| Time runs out / forced logout     | Re-locks instantly, kills fullscreen games, returns to login | Still no escape to desktop                |
 | Customer tries to kill the app    | Single-instance + auto-start relaunch        | Task Manager disabled; app is the shell   |
