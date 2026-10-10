@@ -351,8 +351,10 @@ th {
   align-items: center;
 }
 
-.toolbar input {
+.toolbar input,
+.toolbar select {
   max-width: 280px;
+  width: auto;
 }
 
 .spacer {
@@ -527,7 +529,8 @@ th {
   word-break: break-all;
 }
 
-.session-card .sc-pc {
+.session-card .sc-pc,
+.session-card .sc-online {
   color: var(--muted);
   font-size: 13px;
 }
@@ -641,7 +644,8 @@ th {
   .toolbar {
     gap: 10px;
   }
-  .toolbar input {
+  .toolbar input,
+  .toolbar select {
     max-width: none;
     flex: 1 1 100%;
   }

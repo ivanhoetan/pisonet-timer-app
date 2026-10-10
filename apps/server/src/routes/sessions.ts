@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { endSessionSchema } from '@pisonet/shared';
 import { Session } from '../models/Session';
+import { SessionLog, SessionLogAction } from '../models/SessionLog';
 import { Computer } from '../models/Computer';
 import { validateBody } from '../middleware/validate';
 import {
@@ -79,6 +80,52 @@ sessionsRouter.get('/live', authMiddleware, adminMiddleware, async (_req, res) =
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to list active sessions' });
+  }
+});
+
+sessionsRouter.get('/logs', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(5, parseInt(String(req.query.pageSize ?? '25'), 10) || 25)
+    );
+
+    const action = typeof req.query.action === 'string' ? req.query.action : '';
+    const filter: Record<string, unknown> = {};
+    if (action === SessionLogAction.LOGIN || action === SessionLogAction.LOGOUT) {
+      filter.action = action;
+    }
+
+    const total = await SessionLog.countDocuments(filter);
+    const rows = await SessionLog.find(filter)
+      .populate('computerId', 'computerCode name')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean();
+
+    const items = rows.map((row) => {
+      const computer = row.computerId as unknown as {
+        computerCode?: string;
+        name?: string;
+      } | null;
+      return {
+        _id: row._id,
+        username: row.username,
+        action: row.action,
+        reason: row.reason,
+        remainingSeconds: row.remainingSeconds,
+        createdAt: row.createdAt,
+        computerCode: computer?.computerCode || '',
+        computerName: computer?.name || '',
+      };
+    });
+
+    res.json({ items, total, page, pageSize });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to list login and logout logs' });
   }
 });
 

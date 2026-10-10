@@ -107,6 +107,17 @@ export interface Overview {
   today: { topups: number; minutesSold: number; revenue: number };
 }
 
+export interface SessionLogEntry {
+  _id: string;
+  username: string;
+  action: 'login' | 'logout';
+  reason: 'customer' | 'expired' | 'staff';
+  remainingSeconds: number;
+  createdAt: string;
+  computerCode: string;
+  computerName: string;
+}
+
 export interface Transaction {
   _id: string;
   userId: { _id: string; username: string } | string;

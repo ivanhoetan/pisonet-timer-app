@@ -8,6 +8,7 @@ const overview = ref<Overview | null>(null);
 const live = ref<LiveSession[]>([]);
 const error = ref('');
 const toast = ref('');
+const now = ref(Date.now());
 
 // Top-up modal state
 const topupFor = ref<LiveSession | null>(null);
@@ -124,8 +125,15 @@ async function submitAdjust() {
   }
 }
 
-// Smoothly tick down remaining time between server refreshes.
+function onlineSeconds(s: LiveSession): number {
+  const started = new Date(s.startedAt).getTime();
+  if (Number.isNaN(started)) return 0;
+  return Math.max(0, Math.floor((now.value - started) / 1000));
+}
+
+// Smoothly tick remaining time and online time between server refreshes.
 function tickLocal() {
+  now.value = Date.now();
   for (const s of live.value) {
     if (s.remainingSeconds > 0) s.remainingSeconds -= 1;
   }
@@ -193,6 +201,7 @@ onUnmounted(() => {
               <tr>
                 <th>User</th>
                 <th>Computer</th>
+                <th>Online</th>
                 <th>Time left</th>
                 <th></th>
               </tr>
@@ -201,6 +210,7 @@ onUnmounted(() => {
               <tr v-for="s in live" :key="s.sessionId">
                 <td>{{ s.username }}</td>
                 <td>{{ s.computerCode }}</td>
+                <td>{{ formatClock(onlineSeconds(s)) }}</td>
                 <td :style="{ color: s.remainingSeconds < 120 ? 'var(--warning)' : 'inherit' }">
                   {{ formatClock(s.remainingSeconds) }}
                 </td>
@@ -223,6 +233,7 @@ onUnmounted(() => {
             <div>
               <div class="sc-user">{{ s.username }}</div>
               <div class="sc-pc">{{ s.computerCode }}</div>
+              <div class="sc-online">Online {{ formatClock(onlineSeconds(s)) }}</div>
             </div>
             <span
               class="sc-time"

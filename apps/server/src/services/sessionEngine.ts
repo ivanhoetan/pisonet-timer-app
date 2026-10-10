@@ -1,8 +1,10 @@
 import { Types } from 'mongoose';
 import { SessionStatus, WsEvents } from '@pisonet/shared';
 import { Session, ISession } from '../models/Session';
+import { SessionLogReason, type SessionLogReason as SessionEndReason } from '../models/SessionLog';
 import { User } from '../models/User';
 import { Computer } from '../models/Computer';
+import { recordSessionLog } from './sessionLog';
 import type { Server as SocketServer } from 'socket.io';
 
 export interface ActiveSessionCache {
@@ -154,7 +156,7 @@ export class SessionEngine {
       const remainingSeconds = this.getRemainingSeconds(entry);
 
       if (remainingSeconds <= 0) {
-        await this.pauseSession(sessionId);
+        await this.pauseSession(sessionId, SessionLogReason.EXPIRED);
       } else if (sameComputer) {
         this.emitStartSession(entry, remainingSeconds);
         return { session: existingUserSession, remainingSeconds };
@@ -209,6 +211,15 @@ export class SessionEngine {
     const remainingSeconds = this.getRemainingSeconds(cacheEntry);
     this.emitStartSession(cacheEntry, remainingSeconds);
 
+    recordSessionLog({
+      userId: params.userId,
+      username: params.username,
+      computerId: params.computerId,
+      action: 'login',
+      reason: SessionLogReason.CUSTOMER,
+      remainingSeconds,
+    });
+
     return { session, remainingSeconds };
   }
 
@@ -218,10 +229,13 @@ export class SessionEngine {
     return computer.computerCode || computer.name || 'another computer';
   }
 
-  async pauseSession(sessionId: string): Promise<{ remainingSeconds: number }> {
+  async pauseSession(
+    sessionId: string,
+    reason: SessionEndReason = SessionLogReason.CUSTOMER
+  ): Promise<{ remainingSeconds: number }> {
     const cached = this.cache.get(sessionId);
     if (cached) {
-      return this.finalizePause(sessionId, cached);
+      return this.finalizePause(sessionId, cached, reason);
     }
 
     const dbSession = await Session.findById(sessionId);
@@ -231,7 +245,7 @@ export class SessionEngine {
 
     const user = await User.findById(dbSession.userId);
     const entry = this.toCacheEntry(dbSession, user?.username || 'user');
-    return this.finalizePause(sessionId, entry);
+    return this.finalizePause(sessionId, entry, reason);
   }
 
   async pauseUserOnComputer(
@@ -261,7 +275,8 @@ export class SessionEngine {
 
   private async finalizePause(
     sessionId: string,
-    cached: ActiveSessionCache
+    cached: ActiveSessionCache,
+    reason: SessionEndReason
   ): Promise<{ remainingSeconds: number }> {
     const remainingSeconds = this.getRemainingSeconds(cached);
     const secondsUsed = cached.secondsAllocated - remainingSeconds;
@@ -288,6 +303,15 @@ export class SessionEngine {
 
     this.cache.delete(sessionId);
     this.emitSessionEnded(cached.computerId, 'paused');
+
+    recordSessionLog({
+      userId: cached.userId,
+      username: cached.username,
+      computerId: cached.computerId,
+      action: 'logout',
+      reason,
+      remainingSeconds,
+    });
 
     return { remainingSeconds };
   }
@@ -317,6 +341,16 @@ export class SessionEngine {
       await Computer.findByIdAndUpdate(dbSession.computerId, { status: 'ONLINE' });
       this.emitSessionEnded(dbSession.computerId.toString(), markCompleted ? 'expired' : 'ended');
 
+      const user = await User.findById(dbSession.userId).select('username');
+      recordSessionLog({
+        userId: dbSession.userId.toString(),
+        username: user?.username || 'user',
+        computerId: dbSession.computerId.toString(),
+        action: 'logout',
+        reason: markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
+        remainingSeconds: remaining,
+      });
+
       return { remainingSeconds: remaining };
     }
 
@@ -338,6 +372,15 @@ export class SessionEngine {
       cached.computerId,
       markCompleted ? 'expired' : 'ended'
     );
+
+    recordSessionLog({
+      userId: cached.userId,
+      username: cached.username,
+      computerId: cached.computerId,
+      action: 'logout',
+      reason: markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
+      remainingSeconds,
+    });
 
     return { remainingSeconds };
   }
@@ -391,7 +434,7 @@ export class SessionEngine {
     const active = this.getByComputerId(computerId);
     if (active) {
       // pauseSession saves remaining time and emits SESSION_ENDED + FORCE_LOCK.
-      await this.pauseSession(active.sessionId);
+      await this.pauseSession(active.sessionId, SessionLogReason.STAFF);
     } else {
       this.io?.to(`computer:${computerId}`).emit(WsEvents.FORCE_LOCK, { reason });
     }
@@ -404,7 +447,7 @@ export class SessionEngine {
       // Free access for servicing: end any paid session (time saved) first.
       const active = this.getByComputerId(computerId);
       if (active) {
-        await this.pauseSession(active.sessionId);
+        await this.pauseSession(active.sessionId, SessionLogReason.STAFF);
       }
       await Computer.findByIdAndUpdate(computerId, { status: 'MAINTENANCE' });
       this.io?.to(`computer:${computerId}`).emit(WsEvents.MAINTENANCE_MODE, { enabled: true });
@@ -417,7 +460,7 @@ export class SessionEngine {
   async shutdownComputer(computerId: string, reason = 'admin_shutdown'): Promise<void> {
     const active = this.getByComputerId(computerId);
     if (active) {
-      await this.pauseSession(active.sessionId);
+      await this.pauseSession(active.sessionId, SessionLogReason.STAFF);
     }
 
     await Computer.findByIdAndUpdate(computerId, { status: 'LOCKED' });

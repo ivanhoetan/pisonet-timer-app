@@ -41,6 +41,9 @@
       "electron/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "electron/*.ps1"
+    ],
     "win": {
       "target": [
         {

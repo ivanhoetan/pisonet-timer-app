@@ -81,10 +81,11 @@ const LOCK_SHORTCUTS = [
   'Super+Tab',
   'Super+L',
   'Control+Escape',
-  'Control+Shift+Escape',
-  'CommandOrControl+Shift+Escape',
   'Control+Alt+Tab',
 ];
+
+// Kept registered even during a paid session, when the kiosk lock is released.
+const TASKMGR_SHORTCUTS = ['Control+Shift+Escape', 'CommandOrControl+Shift+Escape'];
 
 function getTrayIcon() {
   const iconPath = path.join(__dirname, 'tray-icon.png');
@@ -439,8 +440,127 @@ function requestLogoutFromTray() {
   mainWindow.webContents.send('tray:logout');
 }
 
-function quitApp() {
+function kioskMarkerPath() {
+  return path.join(app.getPath('userData'), 'kiosk-run');
+}
+
+function watchdogPidPath() {
+  return path.join(app.getPath('userData'), 'watchdog.pid');
+}
+
+function watchdogScriptPath() {
+  const unpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'watchdog.ps1');
+  if (fs.existsSync(unpacked)) return unpacked;
+  return path.join(__dirname, 'watchdog.ps1');
+}
+
+function isPidAlive(pid) {
+  if (!pid || Number.isNaN(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readWatchdogPid() {
+  try {
+    return parseInt(fs.readFileSync(watchdogPidPath(), 'utf8'), 10);
+  } catch {
+    return 0;
+  }
+}
+
+function writeRunMarker() {
+  try {
+    fs.mkdirSync(path.dirname(kioskMarkerPath()), { recursive: true });
+    fs.writeFileSync(kioskMarkerPath(), String(process.pid));
+  } catch (err) {
+    console.error('[watchdog] failed to write run marker', err);
+  }
+}
+
+function disableTaskManager() {
+  if (isDev || process.platform !== 'win32') return;
+  exec(
+    'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f',
+    { windowsHide: true },
+    () => {}
+  );
+}
+
+function registerTaskMgrBlock() {
+  if (isDev) return;
+  for (const accelerator of TASKMGR_SHORTCUTS) {
+    try {
+      globalShortcut.register(accelerator, () => {});
+    } catch {
+      // ignore
+    }
+  }
+}
+
+// Separate process so killing Pisonet Timer.exe does not kill the relauncher.
+function ensureWatchdog() {
+  if (isDev || isQuitting || process.platform !== 'win32') return;
+  if (!fs.existsSync(watchdogScriptPath())) return;
+  if (isPidAlive(readWatchdogPid())) return;
+
+  writeRunMarker();
+  const child = spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      watchdogScriptPath(),
+      '-ExePath',
+      process.execPath,
+      '-MarkerPath',
+      kioskMarkerPath(),
+      '-PidPath',
+      watchdogPidPath(),
+    ],
+    { detached: true, stdio: 'ignore', windowsHide: true }
+  );
+  child.unref();
+  if (child.pid) {
+    try {
+      fs.writeFileSync(watchdogPidPath(), String(child.pid));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function stopKioskGuard() {
   isQuitting = true;
+  try {
+    fs.unlinkSync(kioskMarkerPath());
+  } catch {
+    // ignore
+  }
+  const pid = readWatchdogPid();
+  if (isPidAlive(pid) && pid !== process.pid) {
+    try {
+      process.kill(pid);
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    fs.unlinkSync(watchdogPidPath());
+  } catch {
+    // ignore
+  }
+}
+
+function quitApp() {
+  stopKioskGuard();
   app.quit();
 }
 
@@ -450,6 +570,8 @@ function shutdownPc() {
     console.log('[dev] shutdown requested (ignored in dev mode)');
     return;
   }
+
+  stopKioskGuard();
 
   if (process.platform === 'win32') {
     exec('shutdown /s /f /t 0');
@@ -622,6 +744,10 @@ app.whenReady().then(() => {
       openAtLogin: true,
       path: process.execPath,
     });
+    disableTaskManager();
+    registerTaskMgrBlock();
+    ensureWatchdog();
+    setInterval(ensureWatchdog, 3000);
   }
 
   createWindow();
@@ -633,7 +759,7 @@ app.on('window-all-closed', (e) => {
 });
 
 app.on('before-quit', () => {
-  isQuitting = true;
+  stopKioskGuard();
   unregisterLockShortcuts();
   stopKeyboardLock();
   if (powerBlocker) {
