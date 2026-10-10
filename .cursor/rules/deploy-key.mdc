@@ -1,0 +1,19 @@
+---
+description: Push and deploy this repo with the GitHub deploy key
+alwaysApply: true
+---
+
+# Deploy key
+
+When the user asks to push or deploy, use the deploy key. Do not push with the default GitHub login.
+
+- Repo: `git@github.com:ivanhoetan/pisonet-timer-app.git` (`origin`)
+- Key file: `~/.ssh/pisonet-timer-deploy` (private key stays on this machine; never commit it or paste it into chat)
+- Do not push to `old-origin` (`ivanhoeytan-mysuki/pisonet-timer-app`) unless the user asks
+
+```bash
+export GIT_SSH_COMMAND='ssh -i "$HOME/.ssh/pisonet-timer-deploy" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new'
+git push git@github.com:ivanhoetan/pisonet-timer-app.git HEAD:main
+```
+
+A `v*` tag on that repo starts the Windows installer build. Render publishes the API and admin portal from `main`.
