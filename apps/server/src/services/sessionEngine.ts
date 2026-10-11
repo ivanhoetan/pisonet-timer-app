@@ -156,7 +156,16 @@ export class SessionEngine {
       const remainingSeconds = this.getRemainingSeconds(entry);
 
       if (remainingSeconds <= 0) {
-        await this.pauseSession(sessionId, SessionLogReason.EXPIRED);
+        // The open session is already finished. Close it and stop. Do not
+        // start another one from the balance captured before this close.
+        this.cache.delete(sessionId);
+        try {
+          await this.pauseSession(sessionId, SessionLogReason.EXPIRED);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '';
+          if (!message.includes('not active')) throw err;
+        }
+        throw new Error('Insufficient balance');
       } else if (sameComputer) {
         this.emitStartSession(entry, remainingSeconds);
         return { session: existingUserSession, remainingSeconds };
@@ -273,26 +282,42 @@ export class SessionEngine {
     return this.pauseSession(dbSession._id.toString());
   }
 
-  private async finalizePause(
+  private async savedBalance(userId: string): Promise<number> {
+    const user = await User.findById(userId).select('balanceSeconds');
+    return user?.balanceSeconds ?? 0;
+  }
+
+  // Only the first closer wins. A logout or a stale in-memory timer cannot
+  // overwrite a balance that was already saved.
+  private async closeActiveSession(
     sessionId: string,
     cached: ActiveSessionCache,
-    reason: SessionEndReason
-  ): Promise<{ remainingSeconds: number }> {
+    reason: SessionEndReason,
+    markCompleted: boolean
+  ): Promise<{ remainingSeconds: number; closed: boolean }> {
     const remainingSeconds = this.getRemainingSeconds(cached);
     const secondsUsed = cached.secondsAllocated - remainingSeconds;
 
-    const session = await Session.findByIdAndUpdate(
-      sessionId,
-      {
-        status: SessionStatus.PAUSED,
-        pausedAt: new Date(),
-        secondsUsed,
-      },
+    const claimed = await Session.findOneAndUpdate(
+      { _id: sessionId, status: SessionStatus.ACTIVE },
+      markCompleted
+        ? {
+            status: SessionStatus.COMPLETED,
+            endedAt: new Date(),
+            secondsUsed,
+          }
+        : {
+            status: SessionStatus.PAUSED,
+            pausedAt: new Date(),
+            secondsUsed,
+          },
       { new: true }
     );
 
-    if (!session) {
-      throw new Error('Session not found');
+    this.cache.delete(sessionId);
+
+    if (!claimed) {
+      return { remainingSeconds: await this.savedBalance(cached.userId), closed: false };
     }
 
     await User.findByIdAndUpdate(cached.userId, {
@@ -301,8 +326,7 @@ export class SessionEngine {
 
     await Computer.findByIdAndUpdate(cached.computerId, { status: 'ONLINE' });
 
-    this.cache.delete(sessionId);
-    this.emitSessionEnded(cached.computerId, 'paused');
+    this.emitSessionEnded(cached.computerId, markCompleted ? 'expired' : 'paused');
 
     recordSessionLog({
       userId: cached.userId,
@@ -313,76 +337,45 @@ export class SessionEngine {
       remainingSeconds,
     });
 
-    return { remainingSeconds };
+    return { remainingSeconds, closed: true };
   }
 
-  async endSession(sessionId: string, markCompleted = false): Promise<{ remainingSeconds: number }> {
+  private async finalizePause(
+    sessionId: string,
+    cached: ActiveSessionCache,
+    reason: SessionEndReason
+  ): Promise<{ remainingSeconds: number }> {
+    return this.closeActiveSession(sessionId, cached, reason, false);
+  }
+
+  async endSession(
+    sessionId: string,
+    markCompleted = false
+  ): Promise<{ remainingSeconds: number; closed: boolean }> {
     const cached = this.cache.get(sessionId);
-    if (!cached) {
-      const dbSession = await Session.findById(sessionId);
-      if (!dbSession || dbSession.status !== SessionStatus.ACTIVE) {
-        throw new Error('Session not found or not active');
-      }
-
-      const remaining = Math.max(
-        0,
-        dbSession.secondsAllocated -
-          Math.floor((Date.now() - dbSession.startedAt.getTime()) / 1000)
+    if (cached) {
+      return this.closeActiveSession(
+        sessionId,
+        cached,
+        markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
+        markCompleted
       );
-
-      await Session.findByIdAndUpdate(sessionId, {
-        status: markCompleted ? SessionStatus.COMPLETED : SessionStatus.PAUSED,
-        endedAt: new Date(),
-        pausedAt: markCompleted ? undefined : new Date(),
-        secondsUsed: dbSession.secondsAllocated - remaining,
-      });
-
-      await User.findByIdAndUpdate(dbSession.userId, { balanceSeconds: remaining });
-      await Computer.findByIdAndUpdate(dbSession.computerId, { status: 'ONLINE' });
-      this.emitSessionEnded(dbSession.computerId.toString(), markCompleted ? 'expired' : 'ended');
-
-      const user = await User.findById(dbSession.userId).select('username');
-      recordSessionLog({
-        userId: dbSession.userId.toString(),
-        username: user?.username || 'user',
-        computerId: dbSession.computerId.toString(),
-        action: 'logout',
-        reason: markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
-        remainingSeconds: remaining,
-      });
-
-      return { remainingSeconds: remaining };
     }
 
-    const remainingSeconds = this.getRemainingSeconds(cached);
-    const secondsUsed = cached.secondsAllocated - remainingSeconds;
+    const dbSession = await Session.findById(sessionId);
+    if (!dbSession || dbSession.status !== SessionStatus.ACTIVE) {
+      this.cache.delete(sessionId);
+      throw new Error('Session not found or not active');
+    }
 
-    await Session.findByIdAndUpdate(sessionId, {
-      status: markCompleted ? SessionStatus.COMPLETED : SessionStatus.PAUSED,
-      endedAt: new Date(),
-      pausedAt: markCompleted ? undefined : new Date(),
-      secondsUsed,
-    });
-
-    await User.findByIdAndUpdate(cached.userId, { balanceSeconds: remainingSeconds });
-    await Computer.findByIdAndUpdate(cached.computerId, { status: 'ONLINE' });
-
-    this.cache.delete(sessionId);
-    this.emitSessionEnded(
-      cached.computerId,
-      markCompleted ? 'expired' : 'ended'
+    const user = await User.findById(dbSession.userId).select('username');
+    const entry = this.toCacheEntry(dbSession, user?.username || 'user');
+    return this.closeActiveSession(
+      sessionId,
+      entry,
+      markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
+      markCompleted
     );
-
-    recordSessionLog({
-      userId: cached.userId,
-      username: cached.username,
-      computerId: cached.computerId,
-      action: 'logout',
-      reason: markCompleted ? SessionLogReason.EXPIRED : SessionLogReason.CUSTOMER,
-      remainingSeconds,
-    });
-
-    return { remainingSeconds };
   }
 
   async addTime(sessionId: string, additionalSeconds: number): Promise<number> {
@@ -391,11 +384,17 @@ export class SessionEngine {
       throw new Error('Session not active');
     }
 
-    cached.secondsAllocated += additionalSeconds;
+    const updated = await Session.findOneAndUpdate(
+      { _id: sessionId, status: SessionStatus.ACTIVE },
+      { $inc: { secondsAllocated: additionalSeconds } },
+      { new: true }
+    );
+    if (!updated) {
+      this.cache.delete(sessionId);
+      throw new Error('Session not active');
+    }
 
-    await Session.findByIdAndUpdate(sessionId, {
-      $inc: { secondsAllocated: additionalSeconds },
-    });
+    cached.secondsAllocated += additionalSeconds;
 
     const remainingSeconds = this.getRemainingSeconds(cached);
     this.io?.to(`computer:${cached.computerId}`).emit(WsEvents.ADD_TIME, {
@@ -507,13 +506,14 @@ export class SessionEngine {
 
       const remaining = this.getRemainingSeconds(session);
       if (remaining <= 0) {
-        this.io
-          ?.to(`computer:${session.computerId}`)
-          .emit(WsEvents.SESSION_EXPIRED, { sessionId });
-
         try {
-          await this.endSession(sessionId, true);
+          const result = await this.endSession(sessionId, true);
+          if (!result.closed) continue;
+          this.io
+            ?.to(`computer:${session.computerId}`)
+            .emit(WsEvents.SESSION_EXPIRED, { sessionId });
         } catch (err) {
+          this.cache.delete(sessionId);
           console.error('Failed to expire session', sessionId, err);
         }
       }
