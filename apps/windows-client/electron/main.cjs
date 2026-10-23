@@ -87,6 +87,10 @@ const LOCK_SHORTCUTS = [
 // Kept registered even during a paid session, when the kiosk lock is released.
 const TASKMGR_SHORTCUTS = ['Control+Shift+Escape', 'CommandOrControl+Shift+Escape'];
 
+// Also blocked during a paid session — Win+R is how customers launch resmon /
+// powershell to Suspend-Process the timer after the lock is released.
+const SESSION_ESCAPE_SHORTCUTS = ['Super+R', 'CommandOrControl+Shift+Escape', 'Control+Shift+Escape'];
+
 function getTrayIcon() {
   const iconPath = path.join(__dirname, 'tray-icon.png');
   if (fs.existsSync(iconPath)) {
@@ -345,16 +349,35 @@ function applyLock() {
   registerMaintenanceShortcut();
 }
 
+function registerSessionEscapeBlock() {
+  if (isDev) return;
+  for (const accelerator of SESSION_ESCAPE_SHORTCUTS) {
+    try {
+      globalShortcut.register(accelerator, () => {});
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function releaseLock() {
   lockdownActive = false;
   reclaimGeneration += 1;
   unregisterLockShortcuts();
   stopKeyboardLock();
   unregisterMaintenanceShortcut();
+  // Paid session unlocks the desktop, but keep Task Manager / Win+R blocked so
+  // customers cannot Suspend-Process or kill the timer from a Run dialog.
+  // Skip during maintenance — staff may need Run / Task Manager tools.
+  if (!maintenanceActive) {
+    registerTaskMgrBlock();
+    registerSessionEscapeBlock();
+  }
   if (!mainWindow) return;
 
   mainWindow.setMinimizable(true);
   if (!isDev) {
+    // Keep the mini-timer able to stay above games; full kiosk is off.
     mainWindow.setAlwaysOnTop(false);
     mainWindow.setKiosk(false);
   }
@@ -488,6 +511,16 @@ function disableTaskManager() {
     { windowsHide: true },
     () => {}
   );
+}
+
+// Re-apply periodically — a savvy customer (or a game launcher) can clear the
+// DisableTaskMgr value while the session lock is released.
+function hardenOsPolicies() {
+  disableTaskManager();
+  registerTaskMgrBlock();
+  if (!lockdownActive && !maintenanceActive) {
+    registerSessionEscapeBlock();
+  }
 }
 
 function registerTaskMgrBlock() {
@@ -744,10 +777,12 @@ app.whenReady().then(() => {
       openAtLogin: true,
       path: process.execPath,
     });
-    disableTaskManager();
-    registerTaskMgrBlock();
+    hardenOsPolicies();
     ensureWatchdog();
-    setInterval(ensureWatchdog, 3000);
+    setInterval(() => {
+      ensureWatchdog();
+      hardenOsPolicies();
+    }, 3000);
   }
 
   createWindow();

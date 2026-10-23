@@ -82,6 +82,9 @@ const sessionToken = ref('');
 const username = ref('');
 const remainingSeconds = ref(0);
 const startedAt = ref<Date | null>(null);
+// Wall-clock end time so a suspended / throttled process cannot "pause" the
+// visible countdown — when the UI wakes, remaining snaps to real elapsed time.
+const sessionEndsAtMs = ref<number | null>(null);
 const loyaltyStamps = ref(0);
 
 // Loyalty: 5 stamps = 1 free hour. Mirrors the server constant.
@@ -188,15 +191,32 @@ function clearTimers() {
   heartbeatTimer = null;
 }
 
+function applyRemainingSeconds(seconds: number, sessionStartedAt?: Date | null) {
+  const safe = Math.max(0, Math.floor(seconds));
+  remainingSeconds.value = safe;
+  // remainingSeconds is already net of elapsed time, so the end instant is
+  // "now + remaining" — never startedAt + remaining.
+  sessionEndsAtMs.value = Date.now() + safe * 1000;
+  if (sessionStartedAt) {
+    startedAt.value = sessionStartedAt;
+  }
+}
+
+function syncRemainingFromWallClock() {
+  if (sessionEndsAtMs.value == null) return;
+  const left = Math.max(0, Math.ceil((sessionEndsAtMs.value - Date.now()) / 1000));
+  remainingSeconds.value = left;
+  if (left <= 0) {
+    screen.value = 'expired';
+    clearTimers();
+  }
+}
+
 function startCountdown() {
   clearTimers();
+  syncRemainingFromWallClock();
   countdownTimer = setInterval(() => {
-    if (remainingSeconds.value > 0) {
-      remainingSeconds.value -= 1;
-    } else {
-      screen.value = 'expired';
-      clearTimers();
-    }
+    syncRemainingFromWallClock();
   }, 1000);
 }
 
@@ -206,6 +226,7 @@ function resetSession() {
   username.value = '';
   remainingSeconds.value = 0;
   startedAt.value = null;
+  sessionEndsAtMs.value = null;
   loyaltyStamps.value = 0;
   loginError.value = '';
 }
@@ -256,8 +277,7 @@ function connectSocket() {
     onStartSession: (payload) => {
       sessionId.value = payload.sessionId;
       username.value = payload.username;
-      remainingSeconds.value = payload.remainingSeconds;
-      startedAt.value = new Date(payload.startedAt);
+      applyRemainingSeconds(payload.remainingSeconds, new Date(payload.startedAt));
       if (typeof payload.loyaltyStamps === 'number') {
         loyaltyStamps.value = payload.loyaltyStamps;
       }
@@ -268,7 +288,7 @@ function connectSocket() {
       startCountdown();
     },
     onAddTime: (payload) => {
-      remainingSeconds.value = payload.remainingSeconds;
+      applyRemainingSeconds(payload.remainingSeconds);
     },
     onSessionEnded: () => {
       clearTimers();
@@ -390,9 +410,9 @@ async function handleLogin() {
     sessionId.value = result.sessionId;
     sessionToken.value = result.token;
     username.value = result.username;
-    remainingSeconds.value = result.remainingSeconds;
     loyaltyStamps.value = result.loyaltyStamps ?? 0;
     startedAt.value = new Date();
+    applyRemainingSeconds(result.remainingSeconds, startedAt.value);
     screen.value = 'session';
     startCountdown();
   } catch (err) {
