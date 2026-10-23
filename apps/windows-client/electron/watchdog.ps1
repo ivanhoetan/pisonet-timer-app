@@ -46,7 +46,8 @@ while (Test-Path -LiteralPath $MarkerPath) {
     Start-Process -FilePath $ExePath | Out-Null
   }
 
-  Start-Sleep -Seconds 2
+  # Check often so Task Manager End Task only yields a brief flash of desktop.
+  Start-Sleep -Milliseconds 800
 }
 
 Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue

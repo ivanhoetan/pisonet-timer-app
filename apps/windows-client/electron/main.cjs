@@ -513,11 +513,24 @@ function disableTaskManager() {
   );
 }
 
+// We cannot hide our process from Task Manager (Windows does not allow that for
+// normal apps). If Task Manager still opens, close it immediately so customers
+// cannot End Task the timer. Skipped in maintenance so staff can diagnose.
+function killTaskManagerLike() {
+  if (isDev || maintenanceActive || process.platform !== 'win32') return;
+  exec(
+    'taskkill /F /IM Taskmgr.exe /T >nul 2>&1 & taskkill /F /IM resmon.exe /T >nul 2>&1 & taskkill /F /IM perfmon.exe /T >nul 2>&1',
+    { windowsHide: true },
+    () => {}
+  );
+}
+
 // Re-apply periodically — a savvy customer (or a game launcher) can clear the
 // DisableTaskMgr value while the session lock is released.
 function hardenOsPolicies() {
   disableTaskManager();
   registerTaskMgrBlock();
+  killTaskManagerLike();
   if (!lockdownActive && !maintenanceActive) {
     registerSessionEscapeBlock();
   }
@@ -534,40 +547,41 @@ function registerTaskMgrBlock() {
   }
 }
 
-// Separate process so killing Pisonet Timer.exe does not kill the relauncher.
+function quoteCmdArg(value) {
+  return `"${String(value).replace(/"/g, '')}"`;
+}
+
+// Separate process OUTSIDE Electron's Windows job object. A plain detached
+// spawn is still killed when Task Manager ends Pisonet Timer; `cmd /c start /b`
+// breaks away so the relauncher survives End Task.
 function ensureWatchdog() {
   if (isDev || isQuitting || process.platform !== 'win32') return;
   if (!fs.existsSync(watchdogScriptPath())) return;
   if (isPidAlive(readWatchdogPid())) return;
 
   writeRunMarker();
-  const child = spawn(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
-      watchdogScriptPath(),
-      '-ExePath',
-      process.execPath,
-      '-MarkerPath',
-      kioskMarkerPath(),
-      '-PidPath',
-      watchdogPidPath(),
-    ],
-    { detached: true, stdio: 'ignore', windowsHide: true }
-  );
-  child.unref();
-  if (child.pid) {
-    try {
-      fs.writeFileSync(watchdogPidPath(), String(child.pid));
-    } catch {
-      // ignore
-    }
-  }
+
+  const psArgs = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-WindowStyle',
+    'Hidden',
+    '-File',
+    watchdogScriptPath(),
+    '-ExePath',
+    process.execPath,
+    '-MarkerPath',
+    kioskMarkerPath(),
+    '-PidPath',
+    watchdogPidPath(),
+  ]
+    .map(quoteCmdArg)
+    .join(' ');
+
+  exec(`cmd.exe /c start /b "" powershell.exe ${psArgs}`, { windowsHide: true }, (err) => {
+    if (err) console.error('[watchdog] failed to start', err);
+  });
 }
 
 function stopKioskGuard() {
@@ -783,6 +797,9 @@ app.whenReady().then(() => {
       ensureWatchdog();
       hardenOsPolicies();
     }, 3000);
+    // Faster than the general harden loop so Task Manager rarely stays open
+    // long enough to End Task the timer.
+    setInterval(killTaskManagerLike, 1000);
   }
 
   createWindow();
@@ -793,7 +810,20 @@ app.on('window-all-closed', (e) => {
   e.preventDefault();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  // Only tear down the watchdog on an intentional quit (maintenance Quit /
+  // shutdown). Task Manager "End task" can fire before-quit — if we remove the
+  // marker there, the relauncher exits and the desktop stays unlocked.
+  if (!isQuitting) {
+    e.preventDefault();
+    writeRunMarker();
+    ensureWatchdog();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      showMainWindow();
+    }
+    return;
+  }
+
   stopKioskGuard();
   unregisterLockShortcuts();
   stopKeyboardLock();
